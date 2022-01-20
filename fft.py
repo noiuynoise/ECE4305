@@ -5,7 +5,7 @@ import matplotlib
 import time
 
 sample_rate = 54e6 # Hz
-center_freq = 2.45e9 #107.9e6 # Hz
+center_freq = 160e6 #107.9e6 # Hz
 
 sdr = adi.Pluto("ip:192.168.2.1")
 sdr.sample_rate = int(sample_rate)
@@ -19,8 +19,17 @@ for i in range(1024):
 fg = plt.figure()
 ax = fg.gca()
 h = ax.imshow(data, extent=[-sample_rate/2 + center_freq, sample_rate/2 + center_freq,1024,0], aspect='auto')
-
+ax_slider = plt.axes([0.20, 0.01, 0.65, 0.03])
+slider = plt.Slider(ax_slider, 'Slide->', 70, 6000)
 roll_speed = 20
+
+def update_center(val):
+    print(val)
+    center_freq = val * 1000000
+    sdr.rx_lo = int(center_freq)
+    h.set(extent = [-sample_rate/2 + center_freq, sample_rate/2 + center_freq,1024,0])
+
+slider.on_changed(update_center)
 
 while True:
     for i in range(1024 - roll_speed):
