@@ -10,11 +10,11 @@ sdr.sample_rate = int(sample_rate)
 sdr.rx_rf_bandwidth = int(sample_rate) # filter cutoff, just set it to the same as sample rate
 sdr.rx_lo = int(center_freq)
 
-buffer_length = 1024*4
+buffer_length = 1024*2
 
 sdr.rx_buffer_size = buffer_length # this is the buffer the Pluto uses to buffer samples
 
-num_buffers = 500
+num_buffers = 300
 
 sdr.gain_control_mode_chan0 = "slow_attack"
 data = np.zeros((num_buffers,buffer_length))
@@ -23,7 +23,7 @@ for i in range(num_buffers):
 fg = plt.figure()
 ax = plt.axes([0.10, 0.13, 0.8, 0.85])
 print_data = data / np.amax(data)
-h = ax.imshow(print_data, extent=[-sample_rate/2 + center_freq, sample_rate/2 + center_freq,1024,0], aspect='auto', vmin=0, vmax=1)
+h = ax.imshow(print_data, extent=[-sample_rate/2 + center_freq, sample_rate/2 + center_freq,num_buffers,0], aspect='auto', vmin=0, vmax=1)
 ax_spectrogram = plt.axes([0.10, 0.13, 0.8, 0.2])
 x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq, num=data[num_buffers - 1].size)
 spect = ax_spectrogram.plot(x_scale,data[num_buffers - 1] ** 2 / 1448.1546 / 10**(sdr.rx_hardwaregain_chan0 / 10), scalex = True, scaley = True)
@@ -32,7 +32,7 @@ ax_spectrogram.get_xaxis().set_visible(False)
 ax_slider = plt.axes([0.20, 0.01, 0.65, 0.03])
 slider = plt.Slider(ax_slider, 'Slide->', 70, 6000, valinit = center_freq / 1e6)
 
-roll_speed = 10
+roll_speed = 2
 
 def update_center(val):
     print(val)
