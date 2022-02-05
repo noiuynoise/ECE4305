@@ -1,6 +1,7 @@
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
+import math
 
 sample_rate = 2e6 # Hz
 center_freq = 2426e6 #107.9e6 # Hz
@@ -33,10 +34,23 @@ plt.figure()
 #data_abs = np.reshape(data, (1024, -1))
 #plt.imshow(np.abs(data_abs))
 
-plt.plot(np.abs(data))
+plt.plot(data)
 
 plt.figure()
 
-plt.plot(np.angle(data))
-
 plt.show()
+
+t = np.arange(0,len(data))
+VCO_sig_out_start = math.cos(2*math.pi*2426e6*t)
+mixed_signal = data * VCO_sig_out_start
+
+# LPF GOES HERE 
+
+
+#take output if LPF, take its 2*cos^-1(LPF_output)
+theta_error = 2*math.acos(LPF_output)
+#which gives theta error for each point
+#put theta error back in as the phase for the mixer
+VCO_sig_out_loop = math.cos(2*math.pi*2426e6*t + theta_error)
+#loop
+
