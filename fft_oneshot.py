@@ -28,6 +28,31 @@ print('got data')
 data = data.astype(np.complex64)
 data.tofile('recorded.iq')
 
+fft_size = 2**10
+modulation_index = 2
+
+cfc_input = data
+#CFC
+cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
+cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
+
+freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
+bin_offsets = []
+
+for bin in cfc_bins:
+    #remove modulation components
+    bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
+    #take FFT
+    freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
+    #find biggest bin
+    maxbin = np.argmax(freq_energy)
+    #add frequency offset to offsets array
+    bin_offsets.append(freq_range[maxbin])
+
+#stretch bin_offsets to size of data
+bin_offsets = np.repeat(bin_offsets, fft_size)
+
+
 x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq, num=data.size)
 plt.figure(1)
 plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
@@ -73,6 +98,7 @@ num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.00691218
     0.03080483620668, -0.00624978403779, -0.02156225944864, 0.008545472360693,
     0.01465913219682,-0.009167351758746,-0.009791312677446, 0.009615955044781,
    0.006912181652354, -0.01272215069694, -0.01754311971686,-0.006991626021578]
+
 mixed_signal = []
 data_out = []
 for t in range(len(data)):
