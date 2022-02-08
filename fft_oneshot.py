@@ -31,9 +31,6 @@ x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq,
 plt.figure(1)
 plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
 
-
-#data_abs = np.reshape(data, (1024, -1))
-#plt.imshow(np.abs(data_abs))
 plt.figure(2)
 plt.plot(data)
 
@@ -71,4 +68,8 @@ VCO_sig_out_loop = np.cos(2*math.pi*2426e6*t + theta_error)
 plt.figure(5)
 x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
 plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
+
+plt.figure(6)
+plt.plot(data)
+
 plt.show()
