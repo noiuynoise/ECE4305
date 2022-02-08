@@ -15,7 +15,7 @@ sdr.sample_rate = int(sample_rate)
 sdr.rx_rf_bandwidth = int(sample_rate) # filter cutoff, just set it to the same as sample rate
 sdr.rx_lo = int(center_freq)
 
-buffer_length = 1024*16
+buffer_length = 1024*32
 
 sdr.rx_buffer_size = buffer_length # this is the buffer the Pluto uses to buffer samples
 
@@ -28,31 +28,6 @@ print('got data')
 data = data.astype(np.complex64)
 data.tofile('recorded.iq')
 
-fft_size = 2**10
-modulation_index = 2
-
-cfc_input = data
-#CFC
-cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
-cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
-
-freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
-bin_offsets = []
-
-for bin in cfc_bins:
-    #remove modulation components
-    bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
-    #take FFT
-    freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
-    #find biggest bin
-    maxbin = np.argmax(freq_energy)
-    #add frequency offset to offsets array
-    bin_offsets.append(freq_range[maxbin])
-
-#stretch bin_offsets to size of data
-bin_offsets = np.repeat(bin_offsets, fft_size)
-
-
 x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq, num=data.size)
 plt.figure(1)
 plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
@@ -60,32 +35,9 @@ plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
 plt.figure(2)
 plt.plot(data)
 
-fft_size = 2**10
-modulation_index = 2
-
-cfc_input = data
-#CFC
-cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
-cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
-
-freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
-bin_offsets = []
-
-for bin in cfc_bins:
-    #remove modulation components
-    bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
-    #take FFT
-    freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
-    #find biggest bin
-    maxbin = np.argmax(freq_energy)
-    #add frequency offset to offsets array
-    bin_offsets.append(freq_range[maxbin])
-
-#stretch bin_offsets to size of data
-bin_offsets = np.repeat(bin_offsets, fft_size)
 
 
-ffc_input = cfc_trimmed
+ffc_input = cfc_output
 
 # t = np.arange(0,len(data))
 num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.006912181652354,
@@ -132,13 +84,6 @@ for t in range(len(data)):
    # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
    # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
 
-plt.figure(3)
-x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(LPF_output))))
-
-plt.figure(4)
-x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
 
 plt.figure(5)
 x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
