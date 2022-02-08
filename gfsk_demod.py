@@ -8,7 +8,7 @@ data = np.fromfile('recorded.iq', np.complex64)
 sample_rate = 2e6 # Hz
 center_freq = 2426e6 # Hz
 
-fft_size = 2**6
+fft_size = 2**10
 modulation_index = 2
 
 #raised cosine / low pass filter
