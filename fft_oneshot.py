@@ -38,6 +38,8 @@ plt.plot(data)
 
 plt.figure()
 
+plt.plot(np.angle(data))
+
 plt.show()
 
 t = np.arange(0,len(data))
