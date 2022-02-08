@@ -1,3 +1,4 @@
+from cmath import exp
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
@@ -14,7 +15,7 @@ sdr.sample_rate = int(sample_rate)
 sdr.rx_rf_bandwidth = int(sample_rate) # filter cutoff, just set it to the same as sample rate
 sdr.rx_lo = int(center_freq)
 
-buffer_length = 1024*1024
+buffer_length = 1024*16
 
 sdr.rx_buffer_size = buffer_length # this is the buffer the Pluto uses to buffer samples
 
@@ -56,21 +57,10 @@ x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq,
 plt.figure(1)
 plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
 
-
-#data_abs = np.reshape(data, (1024, -1))
-#plt.imshow(np.abs(data_abs))
 plt.figure(2)
 plt.plot(data)
 
-t = np.arange(0,len(data))
-VCO_sig_out_start = np.cos(2*math.pi*2426e6*t)
-mixed_signal = data * VCO_sig_out_start
-
-plt.figure(3)
-x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(mixed_signal))))
-
-# LPF GOES HERE 
+# t = np.arange(0,len(data))
 num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.006912181652354,
    0.009615955044781,-0.009791312677446,-0.009167351758746,  0.01465913219682,
    0.008545472360693, -0.02156225944864, -0.00624978403779,  0.03080483620668,
@@ -81,22 +71,49 @@ num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.00691218
     0.03080483620668, -0.00624978403779, -0.02156225944864, 0.008545472360693,
     0.01465913219682,-0.009167351758746,-0.009791312677446, 0.009615955044781,
    0.006912181652354, -0.01272215069694, -0.01754311971686,-0.006991626021578]
-LPF_output = signal.lfilter(num_coef, 1, mixed_signal)
-plt.figure(4)
-x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(LPF_output))))
 
+mixed_signal = []
+data_out = []
+for t in range(len(data)):
+  
+   if t == 0:
+      VCO_sig_out_start = exp(1j*2*math.pi*2426e6*t/2e6)
+      mixed_signal.append(data[0] * VCO_sig_out_start)
+      data_out.append(data[t]*VCO_sig_out_start)
+   else:
+      mixed_signal.append(data[t] * VCO_sig_out_loop)
+      data_out.append(data[t]*VCO_sig_out_loop)
 
+   # plt.figure(3)
+   # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
+   # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(mixed_signal))))
 
-#take output if LPF, take its 2*cos^-1(LPF_output)
-theta_error = 2*np.arccos(LPF_output)
-#which gives theta error for each point
-#put theta error back in as the phase for the mixer
-VCO_sig_out_loop = np.cos(2*math.pi*2426e6*t + theta_error)
-#loop
+   # LPF GOES HERE 
+
+   LPF_output = signal.lfilter(num_coef, 1, mixed_signal)
+   # plt.figure(4)
+   # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
+   # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(LPF_output))))
+
+   #take output if LPF, take its 2*cos^-1(LPF_output)
+   theta_error = np.sign(np.cos(np.real(LPF_output[t])))*np.sin(np.real(LPF_output[t])) - np.sign(np.sin(np.real(LPF_output[t])))*np.cos(np.real(LPF_output[t]))
+   # theta_error = 2*np.arccos(LPF_output[t])
+   #which gives theta error for each point
+   #put theta error back in as the phase for the mixer
+   VCO_sig_out_loop =  exp(1j*2*math.pi*2426e6*t/2e6 + theta_error)
+   #loop
+
+   # plt.figure(5)
+   # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
+   # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
+
+   # plt.figure(6)
+   # plt.plot(data)
 
 plt.figure(5)
 x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
+plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(data_out))))
 
+plt.figure(6)
+plt.plot(data_out)
 plt.show()
