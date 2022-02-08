@@ -35,6 +35,33 @@ plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
 plt.figure(2)
 plt.plot(data)
 
+fft_size = 2**10
+modulation_index = 2
+
+cfc_input = data
+#CFC
+cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
+cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
+
+freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
+bin_offsets = []
+
+for bin in cfc_bins:
+    #remove modulation components
+    bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
+    #take FFT
+    freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
+    #find biggest bin
+    maxbin = np.argmax(freq_energy)
+    #add frequency offset to offsets array
+    bin_offsets.append(freq_range[maxbin])
+
+#stretch bin_offsets to size of data
+bin_offsets = np.repeat(bin_offsets, fft_size)
+
+
+ffc_input = cfc_trimmed
+
 # t = np.arange(0,len(data))
 num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.006912181652354,
    0.009615955044781,-0.009791312677446,-0.009167351758746,  0.01465913219682,
@@ -52,11 +79,11 @@ for t in range(len(data)):
   
    if t == 0:
       VCO_sig_out_start = exp(1j*2*math.pi*2426e6*t/2e6)
-      mixed_signal.append(data[0] * VCO_sig_out_start)
-      data_out.append(data[t]*VCO_sig_out_start)
+      mixed_signal.append(ffc_input[0] * VCO_sig_out_start)
+      data_out.append(ffc_input[t]*VCO_sig_out_start)
    else:
-      mixed_signal.append(data[t] * VCO_sig_out_loop)
-      data_out.append(data[t]*VCO_sig_out_loop)
+      mixed_signal.append(ffc_input[t] * VCO_sig_out_loop)
+      data_out.append(ffc_input[t]*VCO_sig_out_loop)
 
    # plt.figure(3)
    # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
@@ -65,11 +92,9 @@ for t in range(len(data)):
    # LPF GOES HERE 
 
    LPF_output = signal.lfilter(num_coef, 1, mixed_signal)
-   # plt.figure(4)
-   # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-   # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(LPF_output))))
+   
 
-   #take output if LPF, take its 2*cos^-1(LPF_output)
+   #take output of LPF
    theta_error = np.sign(np.cos(np.real(LPF_output[t])))*np.sin(np.real(LPF_output[t])) - np.sign(np.sin(np.real(LPF_output[t])))*np.cos(np.real(LPF_output[t]))
    # theta_error = 2*np.arccos(LPF_output[t])
    #which gives theta error for each point
@@ -81,8 +106,13 @@ for t in range(len(data)):
    # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
    # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
 
-   # plt.figure(6)
-   # plt.plot(data)
+plt.figure(3)
+x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
+plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(LPF_output))))
+
+plt.figure(4)
+x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
+plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
 
 plt.figure(5)
 x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
