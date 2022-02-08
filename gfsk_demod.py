@@ -6,11 +6,17 @@ from scipy import signal
 #load in the sampled data
 data = np.fromfile('recorded.iq', np.complex64)
 
+
+
 sample_rate = 2e6 # Hz
 center_freq = 2426e6 # Hz
 
 fft_size = 2**10
 modulation_index = 2
+
+timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
+
+data = data*np.exp(2j * np.pi * 250e3 * timescale)
 
 #timescale = np.arange(0, 0.02, 1/sample_rate)
 #data = np.exp(2j * np.pi * 250e3 * timescale) + 0.25 * np.exp(2j * np.pi * 50e3 * timescale)
@@ -20,7 +26,7 @@ modulation_index = 2
 
 
 cfc_input = data
-plt.plot(np.fft.fftshift(np.fft.fft(cfc_input)))
+plt.plot(np.abs(np.fft.fftshift(np.fft.fft(cfc_input))))
 #CFC
 cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
 cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
@@ -33,19 +39,19 @@ for bin in cfc_bins:
     bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
     #take FFT
     freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
-    #find biggest bin
-    maxbin = np.argmax(freq_energy)
+    #find total of all bins
+    all_energy = np.sum(freq_energy)
+    #find 50% bin
+    curr_energy = 0
+    curr_bin = 0
+    while curr_energy < all_energy / 2:
+        curr_energy += freq_energy[curr_bin]
+        curr_bin += 1
     #add frequency offset to offsets array
-    bin_offsets.append(freq_range[maxbin])
+    bin_offsets.append(freq_range[curr_bin])
 
 #stretch bin_offsets to size of data
 bin_offsets = np.repeat(bin_offsets, fft_size) * -1
-
-
-freq_shift_timescale = np.arange(0, bin_offsets.size/sample_rate, 1/sample_rate)
-freq_shift = np.exp(1j*np.pi*bin_offsets*freq_shift_timescale)
-
-cfc_output = data[0:freq_shift.size] * freq_shift
 
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -58,7 +64,14 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
     y = signal.lfilter(b, a, data)
     return y
 
-#cfc_output = butter_lowpass_filter(cfc_output, 500e3, 2e6)
+freq_shift_timescale = np.arange(0, bin_offsets.size/sample_rate, 1/sample_rate)
+freq_shift = np.exp(2j*np.pi*bin_offsets*freq_shift_timescale)
+
+
+cfc_output = data[0:freq_shift.size] * freq_shift
+
+
+cfc_output = butter_lowpass_filter(cfc_output, 500e3, 2e6)
 
 cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
 cfc_data = np.zeros(cfc_waterfall_bins.shape)
