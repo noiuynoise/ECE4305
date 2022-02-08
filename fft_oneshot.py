@@ -27,6 +27,31 @@ print('got data')
 data = data.astype(np.complex64)
 data.tofile('recorded.iq')
 
+fft_size = 2**10
+modulation_index = 2
+
+cfc_input = data
+#CFC
+cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
+cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
+
+freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
+bin_offsets = []
+
+for bin in cfc_bins:
+    #remove modulation components
+    bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
+    #take FFT
+    freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
+    #find biggest bin
+    maxbin = np.argmax(freq_energy)
+    #add frequency offset to offsets array
+    bin_offsets.append(freq_range[maxbin])
+
+#stretch bin_offsets to size of data
+bin_offsets = np.repeat(bin_offsets, fft_size)
+
+
 x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq, num=data.size)
 plt.figure(1)
 plt.plot(x_scale, abs(np.fft.fftshift(np.fft.fft(data))))
@@ -61,6 +86,8 @@ plt.figure(4)
 x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
 plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(LPF_output))))
 
+
+
 #take output if LPF, take its 2*cos^-1(LPF_output)
 theta_error = 2*np.arccos(LPF_output)
 #which gives theta error for each point
@@ -71,4 +98,5 @@ VCO_sig_out_loop = np.cos(2*math.pi*2426e6*t + theta_error)
 plt.figure(5)
 x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
 plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
+
 plt.show()
