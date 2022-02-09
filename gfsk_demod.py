@@ -1,37 +1,35 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
-
-#load in the sampled data
-data = np.fromfile('recorded.iq', np.complex64)
-
 
 
 sample_rate = 2e6 # Hz
 center_freq = 2426e6 # Hz
-
 fft_size = 2**10
 modulation_index = 2
-
+#load in sample data
+data = np.fromfile('recorded.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
-
+#frequency shift sampled data for testing
 data = data*np.exp(2j * np.pi * 250e3 * timescale)
-
+#optional - generate fake data
 #timescale = np.arange(0, 0.02, 1/sample_rate)
 #data = np.exp(2j * np.pi * 250e3 * timescale) + 0.25 * np.exp(2j * np.pi * 50e3 * timescale)
 
 #raised cosine / low pass filter
 #TODO
 
-
 cfc_input = data
-plt.plot(np.abs(np.fft.fftshift(np.fft.fft(cfc_input))))
 #CFC
+#trim data to nearest FFT bin
 cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
+#put data into FFT bins
 cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
-
+#generate FFT bin frequency array
 freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
+#create recorded frequency offset array
 bin_offsets = []
 
 for bin in cfc_bins:
@@ -51,28 +49,18 @@ for bin in cfc_bins:
     bin_offsets.append(freq_range[curr_bin])
 
 #stretch bin_offsets to size of data
-bin_offsets = np.repeat(bin_offsets, fft_size) * -1
-
-def butter_lowpass(cutoff, fs, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
-    return b, a
-
-def butter_lowpass_filter(data, cutoff, fs, order=5):
-    b, a = butter_lowpass(cutoff, fs, order=order)
-    y = signal.lfilter(b, a, data)
-    return y
-
+bin_offsets = np.repeat(bin_offsets, fft_size)
+#make a timescale for the data
 freq_shift_timescale = np.arange(0, bin_offsets.size/sample_rate, 1/sample_rate)
-freq_shift = np.exp(2j*np.pi*bin_offsets*freq_shift_timescale)
-
-
+#make frequency shifting signal to be mixed with data
+freq_shift = np.exp(-1*2j*np.pi*bin_offsets*freq_shift_timescale)
+#mix frequency compensation with data
 cfc_output = data[0:freq_shift.size] * freq_shift
-
-
-cfc_output = butter_lowpass_filter(cfc_output, 500e3, 2e6)
-
+#low pass data to remove double frequency term
+cfc_output = butter_lowpass_filter(cfc_output, 600e3, 2e6)
+'''
+#CFC visualization
+plt.plot(np.abs(np.fft.fftshift(np.fft.fft(cfc_input))))
 cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
 cfc_data = np.zeros(cfc_waterfall_bins.shape)
 for index, bin in enumerate(cfc_waterfall_bins):
@@ -89,62 +77,57 @@ plt.figure()
 plt.title('data before CFC')
 plt.imshow(pre_cfc_data,extent=[-sample_rate/2, sample_rate/2,cfc_waterfall_bins.shape[1],0], aspect='auto')
 plt.show()
-
+'''
+fft_size = 2**4
+cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
+cfc_data = np.zeros(cfc_waterfall_bins.shape)
+for index, bin in enumerate(cfc_waterfall_bins):
+    cfc_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
+plt.title('data after CFC')
+cfc_data = np.rot90(cfc_data)
+plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
+plt.figure()
 
 ffc_input = cfc_output
 #FFC 
 
 #initialize DPLL
-dpll_curr_freq = 0
-dpll_curr_phase = 0
-last_sample_phase = 0
+vco_curr_phase = 0
+vco_curr_freq = 0 #this is in hz
+vco_gain = 0.1 #how do we set this?
+loop_filter_cutoff = 500e3
 
-loop_filter_integrator = 0
+#setup loop filter
+b, a = butter_lowpass(loop_filter_cutoff, sample_rate, order=5)
+loop_filter_state = signal.lfilter_zi(b, a)
 
-dpll_kp = 1000 #hz per rad offset
-dpll_ki = 10
+#setup PLL output array
+pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 
-dpll_freq = [0]
+for index,sample in enumerate(ffc_input):
+    #generate VCO signal
+    vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
+    vco_output = np.exp(1j*vco_curr_phase)
+    #mix VCO and input signals
+    loop_filter_input = vco_output * sample
+    loop_filter_input_array[index] = loop_filter_input
+    loop_filter_output, zf = signal.lfilter(b,a, loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
+    #store loop filter output
+    pll_output_array[index] = loop_filter_output[-1]
+    #update VCO
+    vco_curr_freq += vco_gain * loop_filter_output[-1]
 
-freq_hi = 500e3
-freq_low = -500e3
-
-for sample in ffc_input:
-    #phase determination
-    sample_phase = np.angle(sample)
-    #phase rotator
-    dpll_curr_phase += dpll_curr_freq * 2 * np.pi / sample_rate
-    rotated_phase = sample_phase + dpll_curr_phase
-    phase_delta = sample_phase - last_sample_phase
-    if phase_delta > np.pi:
-        phase_delta = 2*np.pi - phase_delta
-    if phase_delta < -1*np.pi:
-        phase_delta = -2*np.pi - phase_delta
-    #phase error detector
-    sample_instant_freq = phase_delta * sample_rate / 2 / np.pi
-    dpll_error_hf = freq_hi - sample_instant_freq
-    dpll_error_lf = freq_low - sample_instant_freq
-    dpll_error = dpll_error_hf
-    if np.abs(dpll_error_lf) < np.abs(dpll_error_hf):
-        dpll_error = dpll_error_lf
-
-    #loop filter
-    #just proportional for now
-    loop_filter_integrator += dpll_error * dpll_ki
-    dpll_curr_freq = loop_filter_integrator + dpll_error * dpll_kp
-
-    #variable setting
-    dpll_freq.append(dpll_curr_freq)
-    last_sample_phase = sample_phase
-
-'''
+plt.title('Loop Filter Input')
+plt.plot(timescale, loop_filter_input_array)
 plt.figure()
-
-plt.plot(ffc_input)
-
+plt.title('PLL Output')
+plt.plot(timescale[7140:7340],pll_output_array[7140:7340]/np.amax(pll_output_array))
 plt.figure()
-
-plt.plot(np.array(dpll_freq))
-
+low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, 2e6, order=30)
+plt.title('PLL Output - Low Passed')
+plt.plot(timescale[7140:7340],low_pass_pll_output[7140:7340]/np.amax(low_pass_pll_output))
+plt.figure()
+plt.title('Input Signal')
+plt.plot(ffc_input/np.amax(ffc_input))
 plt.show()
-'''
