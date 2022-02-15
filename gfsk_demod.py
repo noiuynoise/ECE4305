@@ -121,7 +121,20 @@ for index,sample in enumerate(ffc_input):
     #update VCO
     vco_curr_freq += vco_gain * loop_filter_output[-1]
 
+
 print('plotting')
+# NOW DECODING - Alex
+
+# bin_one = np.exp(1j*2*np.pi*2426.185)
+# bin_zero = np.exp(1j*2*np.pi*2425.815)
+# samp_per_bit = 2
+# for n in range(len(pll_output_array)/4):
+#     k = 4*n
+#     curr_bit_1 = pll_output_array[k] 
+#     curr_bit_2 = pll_output_array[k-1]
+#     curr_bit_3 = pll_output_array[k-2]
+#     curr_bit_4 = pll_output_array[k-3]
+
 plt.title('Loop Filter Input')
 plt.plot(timescale, loop_filter_input_array)
 plt.figure()
