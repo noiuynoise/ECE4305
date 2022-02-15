@@ -2,17 +2,17 @@ import numpy as np
 import adi
 import matplotlib.pyplot as plt
 
-sample_rate = 2e6 # Hz
-center_freq = 2426e6 #107.9e6 # Hz
+sample_rate = 4e6 # Hz
+center_freq = 2480e6 #107.9e6 # Hz
 
-rx_bw = sample_rate
+rx_bw = 4e6
 
 sdr = adi.Pluto("ip:192.168.2.1")
 sdr.sample_rate = int(sample_rate)
 sdr.rx_rf_bandwidth = int(rx_bw) # filter cutoff, just set it to the same as sample rate
 sdr.rx_lo = int(center_freq)
 
-buffer_length = 1024*1024
+buffer_length = 1024*32
 
 sdr.rx_buffer_size = buffer_length # this is the buffer the Pluto uses to buffer samples
 
@@ -35,6 +35,6 @@ img_data = np.zeros(waterfall_bins.shape)
 for index, bin in enumerate(waterfall_bins):
     img_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
 
-plt.imshow(img_data)
+plt.imshow(img_data, aspect='auto')
 
 plt.show()
