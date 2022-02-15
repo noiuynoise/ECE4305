@@ -5,7 +5,7 @@ from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
 
 
-sample_rate = 2e6 # Hz
+sample_rate = 4e6 # Hz
 center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
@@ -17,7 +17,7 @@ data = data*np.exp(2j * np.pi * 250e3 * timescale)
 #optional - generate fake data
 #timescale = np.arange(0, 0.02, 1/sample_rate)
 #data = np.exp(2j * np.pi * 250e3 * timescale) + 0.25 * np.exp(2j * np.pi * 50e3 * timescale)
-
+print('running CFC')
 #raised cosine / low pass filter
 #TODO
 
@@ -57,7 +57,7 @@ freq_shift = np.exp(-1*2j*np.pi*bin_offsets*freq_shift_timescale)
 #mix frequency compensation with data
 cfc_output = data[0:freq_shift.size] * freq_shift
 #low pass data to remove double frequency term
-cfc_output = butter_lowpass_filter(cfc_output, 600e3, 2e6)
+cfc_output = butter_lowpass_filter(cfc_output, 600e3, sample_rate)
 '''
 #CFC visualization
 plt.plot(np.abs(np.fft.fftshift(np.fft.fft(cfc_input))))
@@ -78,6 +78,7 @@ plt.title('data before CFC')
 plt.imshow(pre_cfc_data,extent=[-sample_rate/2, sample_rate/2,cfc_waterfall_bins.shape[1],0], aspect='auto')
 plt.show()
 '''
+print('running waterfall FFT')
 fft_size = 2**4
 cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
 cfc_data = np.zeros(cfc_waterfall_bins.shape)
@@ -101,6 +102,8 @@ loop_filter_cutoff = 500e3
 b, a = butter_lowpass(loop_filter_cutoff, sample_rate, order=5)
 loop_filter_state = signal.lfilter_zi(b, a)
 
+print('running PLL')
+
 #setup PLL output array
 pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
@@ -118,15 +121,16 @@ for index,sample in enumerate(ffc_input):
     #update VCO
     vco_curr_freq += vco_gain * loop_filter_output[-1]
 
+print('plotting')
 plt.title('Loop Filter Input')
 plt.plot(timescale, loop_filter_input_array)
 plt.figure()
 plt.title('PLL Output')
-plt.plot(timescale[7140:7340],pll_output_array[7140:7340]/np.amax(pll_output_array))
+plt.plot(timescale,pll_output_array/np.amax(pll_output_array))
 plt.figure()
-low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, 2e6, order=30)
+low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, sample_rate, order=30)
 plt.title('PLL Output - Low Passed')
-plt.plot(timescale[7140:7340],low_pass_pll_output[7140:7340]/np.amax(low_pass_pll_output))
+plt.plot(timescale,low_pass_pll_output/np.amax(low_pass_pll_output))
 plt.figure()
 plt.title('Input Signal')
 plt.plot(ffc_input/np.amax(ffc_input))
