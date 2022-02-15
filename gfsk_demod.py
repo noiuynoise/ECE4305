@@ -83,10 +83,11 @@ cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
 cfc_data = np.zeros(cfc_waterfall_bins.shape)
 for index, bin in enumerate(cfc_waterfall_bins):
     cfc_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
+plt.figure()
 plt.title('data after CFC')
 cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
-plt.figure()
+
 
 ffc_input = cfc_output
 #FFC 
@@ -129,16 +130,25 @@ for index,sample in enumerate(ffc_input):
 #     curr_bit_2 = pll_output_array[k-1]
 #     curr_bit_3 = pll_output_array[k-2]
 #     curr_bit_4 = pll_output_array[k-3]
-
+plt.figure()
 plt.title('Loop Filter Input')
 plt.plot(timescale, loop_filter_input_array)
+
 plt.figure()
 plt.title('PLL Output')
-plt.plot(timescale[7140:7340],pll_output_array[7140:7340]/np.amax(pll_output_array))
+plt.plot(timescale,pll_output_array/np.amax(pll_output_array))
+plt.xlabel("Time in Seconds")
+
+plt.figure()
+plt.title('PLL Output - Zoomed')
+plt.plot(timescale[9160:9970],pll_output_array[9160:9970]/np.amax(pll_output_array))
+plt.xlabel("Time in Seconds")
+
 plt.figure()
 low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, 2e6, order=30)
 plt.title('PLL Output - Low Passed')
-plt.plot(timescale[7140:7340],low_pass_pll_output[7140:7340]/np.amax(low_pass_pll_output))
+plt.plot(timescale[9160:9970],low_pass_pll_output[9160:9970]/np.amax(low_pass_pll_output))
+
 plt.figure()
 plt.title('Input Signal')
 plt.plot(ffc_input/np.amax(ffc_input))
