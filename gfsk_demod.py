@@ -84,6 +84,7 @@ cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
 cfc_data = np.zeros(cfc_waterfall_bins.shape)
 for index, bin in enumerate(cfc_waterfall_bins):
     cfc_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
+plt.figure()
 plt.title('data after CFC')
 cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
