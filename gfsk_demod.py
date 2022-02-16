@@ -132,7 +132,6 @@ for i in range(4, 8):
     plt.title(f'PLL Output - gain={10**i}')
     plt.plot(timescale[6800:8000], np.angle(output[6800:8000]))
 '''
-
 pll_output_array = runpll(cfc_output, 250)
 
 print('plotting')
@@ -147,3 +146,4 @@ plt.figure()
 plt.title('PLL Output - Phase')
 plt.plot(timescale[50:],np.angle(pll_output_array[50:]))
 plt.show()
+

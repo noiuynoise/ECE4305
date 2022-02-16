@@ -6,7 +6,7 @@ import math
 from scipy import signal 
 
 sample_rate = 2e6 # Hz
-center_freq = 2426e6 #107.9e6 # Hz
+center_freq = 2426e6 
 
 rx_bw = 2e6
 
