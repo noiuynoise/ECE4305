@@ -2,10 +2,10 @@ import numpy as np
 import adi
 import matplotlib.pyplot as plt
 
-sample_rate = 4e6 # Hz
+sample_rate = 2e6 # Hz
 center_freq = 2480e6 #107.9e6 # Hz
 
-rx_bw = 4e6
+rx_bw = 1e6
 
 sdr = adi.Pluto("ip:192.168.2.1")
 sdr.sample_rate = int(sample_rate)

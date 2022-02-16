@@ -5,7 +5,7 @@ from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
 
 
-sample_rate = 4e6 # Hz
+sample_rate = 2e6 # Hz
 center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
@@ -77,7 +77,7 @@ plt.figure()
 plt.title('data before CFC')
 plt.imshow(pre_cfc_data,extent=[-sample_rate/2, sample_rate/2,cfc_waterfall_bins.shape[1],0], aspect='auto')
 plt.show()
-'''
+
 print('running waterfall FFT')
 fft_size = 2**4
 cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
@@ -88,56 +88,62 @@ plt.figure()
 plt.title('data after CFC')
 cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
+'''
 
+def runpll(ffc_input, vco_gain):
+    #initialize DPLL
+    vco_curr_phase = 0
+    vco_curr_freq = 250e3 #this is in hz - starting frequency
+    #vco_gain = 10 #do math to find this
 
-ffc_input = cfc_output
-#FFC 
+    #setup loop filter
+    N = 11  # number of taps in the filter
+    a = 100e3  # width of the transition band
+    fc = 500e3 # cutoff frequency
 
-#initialize DPLL
-vco_curr_phase = 0
-vco_curr_freq = 250e3 #this is in hz - starting frequency
-vco_gain = 10 #do math to find this
-loop_filter_cutoff = 500e3
+    # design a halfband symmetric low-pass filter
+    filter = signal.firls(N, [0, fc, fc+a, sample_rate/2], [1, 1, 0, 0], fs=sample_rate)
+    loop_filter_state = signal.lfilter_zi(filter, 1)
 
+    print('running PLL')
+    #setup PLL output array
+    pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+    loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 
+    for index,sample in enumerate(ffc_input):
+        #generate VCO signal
+        vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
+        vco_output = np.exp(1j*vco_curr_phase)
+        #mix VCO and input signals
+        loop_filter_input = vco_output * sample
+        loop_filter_input_array[index] = loop_filter_input
+        loop_filter_output, loop_filter_state = signal.lfilter(filter,1, [loop_filter_input], zi=loop_filter_state, axis=-1)
+        #store loop filter output
+        pll_output_array[index] = loop_filter_output[-1]
+        #update VCO
+        vco_curr_freq = vco_gain * loop_filter_output[-1]
+    return pll_output_array
 
-#setup loop filter
-b, a = butter_lowpass(loop_filter_cutoff, sample_rate, order=5)
-loop_filter_state = signal.lfilter_zi(b, a)
+'''
+for i in range(4, 8):
+    output = runpll(cfc_output, 10**i)
+    print(10**i)
+    plt.figure()
+    plt.title(f'PLL Output - gain={10**i}')
+    plt.plot(timescale[6800:8000], np.angle(output[6800:8000]))
+'''
 
-print('running PLL')
-
-#setup PLL output array
-pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-
-for index,sample in enumerate(ffc_input):
-    #generate VCO signal
-    vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
-    vco_output = np.exp(1j*vco_curr_phase)
-    #mix VCO and input signals
-    loop_filter_input = vco_output * sample
-    loop_filter_input_array[index] = loop_filter_input
-    loop_filter_output, zf = signal.lfilter(b,a, loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
-    #store loop filter output
-    pll_output_array[index] = loop_filter_output[-1]
-    #update VCO
-    vco_curr_freq = vco_gain * loop_filter_output[-1]
-
-
+pll_output_array = runpll(cfc_output, 250)
 
 print('plotting')
-plt.figure()
-plt.title('Loop Filter Output')
-plt.scatter(np.real(pll_output_array), np.imag(pll_output_array))
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+#ax.title('Loop Filter Output')
+ax.scatter3D(timescale[22000:24000], np.real(pll_output_array[22000:24000]), np.imag(pll_output_array[22000:24000]))
 plt.figure()
 plt.title('PLL Output')
-plt.plot(timescale,pll_output_array/np.amax(pll_output_array))
+plt.plot(timescale[50:],np.imag(pll_output_array[50:])/np.amax(pll_output_array[50:]))
 plt.figure()
-low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, sample_rate, order=30)
-plt.title('PLL Output - Low Passed')
-plt.plot(timescale,low_pass_pll_output/np.amax(low_pass_pll_output))
-plt.figure()
-plt.title('Input Signal')
-plt.plot(timescale, ffc_input/np.amax(ffc_input))
+plt.title('PLL Output - Phase')
+plt.plot(timescale[50:],np.angle(pll_output_array[50:]))
 plt.show()
