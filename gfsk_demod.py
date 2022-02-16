@@ -87,16 +87,18 @@ for index, bin in enumerate(cfc_waterfall_bins):
 plt.title('data after CFC')
 cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
-plt.figure()
+
 
 ffc_input = cfc_output
 #FFC 
 
 #initialize DPLL
 vco_curr_phase = 0
-vco_curr_freq = 0 #this is in hz
-vco_gain = 0.1 #how do we set this?
+vco_curr_freq = 250e3 #this is in hz - starting frequency
+vco_gain = 10 #do math to find this
 loop_filter_cutoff = 500e3
+
+
 
 #setup loop filter
 b, a = butter_lowpass(loop_filter_cutoff, sample_rate, order=5)
@@ -119,24 +121,14 @@ for index,sample in enumerate(ffc_input):
     #store loop filter output
     pll_output_array[index] = loop_filter_output[-1]
     #update VCO
-    vco_curr_freq += vco_gain * loop_filter_output[-1]
+    vco_curr_freq = vco_gain * loop_filter_output[-1]
+
 
 
 print('plotting')
-# NOW DECODING - Alex
-
-# bin_one = np.exp(1j*2*np.pi*2426.185)
-# bin_zero = np.exp(1j*2*np.pi*2425.815)
-# samp_per_bit = 2
-# for n in range(len(pll_output_array)/4):
-#     k = 4*n
-#     curr_bit_1 = pll_output_array[k] 
-#     curr_bit_2 = pll_output_array[k-1]
-#     curr_bit_3 = pll_output_array[k-2]
-#     curr_bit_4 = pll_output_array[k-3]
-
-plt.title('Loop Filter Input')
-plt.plot(timescale, loop_filter_input_array)
+plt.figure()
+plt.title('Loop Filter Output')
+plt.scatter(np.real(pll_output_array), np.imag(pll_output_array))
 plt.figure()
 plt.title('PLL Output')
 plt.plot(timescale,pll_output_array/np.amax(pll_output_array))
@@ -146,5 +138,5 @@ plt.title('PLL Output - Low Passed')
 plt.plot(timescale,low_pass_pll_output/np.amax(low_pass_pll_output))
 plt.figure()
 plt.title('Input Signal')
-plt.plot(ffc_input/np.amax(ffc_input))
+plt.plot(timescale, ffc_input/np.amax(ffc_input))
 plt.show()
