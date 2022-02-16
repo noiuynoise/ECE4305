@@ -142,25 +142,10 @@ plt.plot(timescale, loop_filter_input_array)
 plt.figure()
 plt.title('PLL Output')
 plt.plot(timescale,pll_output_array/np.amax(pll_output_array))
-<<<<<<< HEAD
-plt.xlabel("Time in Seconds")
-
-plt.figure()
-plt.title('PLL Output - Zoomed')
-plt.plot(timescale[9160:9970],pll_output_array[9160:9970]/np.amax(pll_output_array))
-plt.xlabel("Time in Seconds")
-
-=======
->>>>>>> db44f3a69f4e3f38c248caf1d789e455663e8b8b
 plt.figure()
 low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, sample_rate, order=30)
 plt.title('PLL Output - Low Passed')
-<<<<<<< HEAD
-plt.plot(timescale[9160:9970],low_pass_pll_output[9160:9970]/np.amax(low_pass_pll_output))
-
-=======
 plt.plot(timescale,low_pass_pll_output/np.amax(low_pass_pll_output))
->>>>>>> db44f3a69f4e3f38c248caf1d789e455663e8b8b
 plt.figure()
 plt.title('Input Signal')
 plt.plot(ffc_input/np.amax(ffc_input))
