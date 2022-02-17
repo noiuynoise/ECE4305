@@ -109,18 +109,43 @@ print('running PLL')
 pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 
+# for index,sample in enumerate(ffc_input):
+#     #generate VCO signal
+#     vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
+#     vco_output = np.exp(1j*vco_curr_phase)
+#     #mix VCO and input signals
+#     loop_filter_input = vco_output * sample
+#     loop_filter_input_array[index] = loop_filter_input
+#     loop_filter_output, zf = signal.lfilter(b,a, loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
+#     #store loop filter output
+#     pll_output_array[index] = loop_filter_output[-1]
+#     #update VCO
+#     vco_curr_freq += vco_gain * loop_filter_output[-1]
+
+# New Error Calculations
+
+binary_1 = 1+0j #this is the base line
+binary_0 = -1+0j
+error = 0
+binary_out = []
 for index,sample in enumerate(ffc_input):
     #generate VCO signal
-    vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
-    vco_output = np.exp(1j*vco_curr_phase)
+    DFS_output = np.exp(1j*2*math.pi*center_freq+error)
     #mix VCO and input signals
-    loop_filter_input = vco_output * sample
+    loop_filter_input = DFS_output * sample
     loop_filter_input_array[index] = loop_filter_input
     loop_filter_output, zf = signal.lfilter(b,a, loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
     #store loop filter output
     pll_output_array[index] = loop_filter_output[-1]
     #update VCO
-    vco_curr_freq += vco_gain * loop_filter_output[-1]
+    error_bin_1 = loop_filter_output[-1] - binary_1*abs(loop_filter_output[-1])
+    error_bin_0 = loop_filter_output[-1] - binary_0*abs(loop_filter_output[-1])
+    error = np.minimum(error_bin_0,error_bin_1)
+    binary_out.append(0 if error == error_bin_0 else 1)
+    
+
+
+
 
 
 print('plotting')
@@ -142,10 +167,7 @@ plt.plot(timescale, loop_filter_input_array)
 plt.figure()
 plt.title('PLL Output')
 plt.plot(timescale,pll_output_array/np.amax(pll_output_array))
-plt.figure()
-low_pass_pll_output = butter_lowpass_filter(pll_output_array, 500e3, sample_rate, order=30)
-plt.title('PLL Output - Low Passed')
-plt.plot(timescale,low_pass_pll_output/np.amax(low_pass_pll_output))
+
 plt.figure()
 plt.title('Input Signal')
 plt.plot(ffc_input/np.amax(ffc_input))
