@@ -2,8 +2,13 @@ import numpy as np
 import adi
 import matplotlib.pyplot as plt
 
+<<<<<<< HEAD
+sample_rate = 2e6 # Hz
+center_freq = 2480e6 #107.9e6 # Hz
+=======
 sample_rate = 1e6 # Hz
 center_freq = 2426e6 #107.9e6 # Hz
+>>>>>>> 5bd5fae7402d18bfdfe3599016707ae7e7aefc36
 
 rx_bw = 1e6
 
