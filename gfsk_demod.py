@@ -5,7 +5,7 @@ from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
 
 
-sample_rate = 2e6 # Hz
+sample_rate = 1e6 # Hz
 center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
@@ -57,7 +57,7 @@ freq_shift = np.exp(-1*2j*np.pi*bin_offsets*freq_shift_timescale)
 #mix frequency compensation with data
 cfc_output = data[0:freq_shift.size] * freq_shift
 #low pass data to remove double frequency term
-cfc_output = butter_lowpass_filter(cfc_output, 600e3, sample_rate)
+cfc_output = butter_lowpass_filter(cfc_output, 400e3, sample_rate)
 '''
 #CFC visualization
 plt.plot(np.abs(np.fft.fftshift(np.fft.fft(cfc_input))))
@@ -124,8 +124,14 @@ plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample
 #         vco_curr_freq = vco_gain * loop_filter_output[-1]
 #     return pll_output_array
 
-ffc_input = cfc_output
+ffc_input = cfc_output[6219:6676]
 #FFC 
+
+b_coefs = [-0.00114093652672, 0.003031662114114,-0.006736727393132,  0.01305215679029,
+   -0.02316499056452,  0.03891083953857, -0.06378018843891,   0.1064967279171,
+    -0.1991002073262,   0.6321452786969,   0.6321452786969,  -0.1991002073262,
+     0.1064967279171, -0.06378018843891,  0.03891083953857, -0.02316499056452,
+    0.01305215679029,-0.006736727393132, 0.003031662114114, -0.00114093652672]
 
 #initialize DPLL
 vco_curr_phase = 0
@@ -134,8 +140,7 @@ vco_gain = 0.1 #how do we set this?
 loop_filter_cutoff = 500e3
 
 #setup loop filter
-b, a = butter_lowpass(loop_filter_cutoff, sample_rate, order=5)
-loop_filter_state = signal.lfilter_zi(b, a)
+loop_filter_state = signal.lfilter_zi(b_coefs, [1])
 
 print('running PLL')
 
@@ -166,11 +171,11 @@ error_out = []
 normalized_output = []
 for index,sample in enumerate(ffc_input):
     #generate VCO signal
-    DFS_output = np.exp(1j*2*math.pi*center_freq+error)
+    DFS_output = np.exp(1j*2*math.pi*1e6+error)
     #mix VCO and input signals
     loop_filter_input = DFS_output * sample
     loop_filter_input_array[index] = loop_filter_input
-    loop_filter_output, zf = signal.lfilter(b,a, loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
+    loop_filter_output, zf = signal.lfilter(b_coefs,[1], loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
     #store loop filter output
     pll_output_array[index] = loop_filter_output[-1]
     #update VCO
@@ -195,16 +200,22 @@ for index,sample in enumerate(ffc_input):
 print(binary_out)
 
 print('plotting')
+
+timescale2 = np.linspace(0, ffc_input.size / sample_rate, num=457)
+plt.figure()
+plt.title('PLL Input')
+plt.plot(timescale2,np.imag(ffc_input)/np.amax(ffc_input))
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 #ax.title('Loop Filter Output')
-ax.scatter3D(timescale, np.real(pll_output_array), np.imag(pll_output_array))
+ax.scatter3D(timescale2, np.real(pll_output_array), np.imag(pll_output_array))
 # ax.scatter3D(timescale, np.real(normalized_output), np.imag(normalized_output))
 plt.figure()
 plt.title('PLL Output')
-plt.plot(timescale[50:],np.imag(pll_output_array[50:])/np.amax(pll_output_array[50:]))
+plt.plot(timescale2,np.imag(pll_output_array)/np.amax(pll_output_array))
 plt.figure()
 plt.title('PLL Output - Phase')
-plt.plot(timescale[50:],np.angle(pll_output_array[50:]))
+plt.plot(timescale2,np.angle(pll_output_array))
 plt.show()
 
+preamble = [1, 0, 1, 0, 1, 0, 1, 0]
