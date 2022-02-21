@@ -90,43 +90,10 @@ cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
 '''
 
-# def runpll(ffc_input, vco_gain):
-#     #initialize DPLL
-#     vco_curr_phase = 0
-#     vco_curr_freq = 250e3 #this is in hz - starting frequency
-#     #vco_gain = 10 #do math to find this
-
-#     #setup loop filter
-#     N = 11  # number of taps in the filter
-#     a = 100e3  # width of the transition band
-#     fc = 500e3 # cutoff frequency
-
-#     # design a halfband symmetric low-pass filter
-#     filter = signal.firls(N, [0, fc, fc+a, sample_rate/2], [1, 1, 0, 0], fs=sample_rate)
-#     loop_filter_state = signal.lfilter_zi(filter, 1)
-
-#     print('running PLL')
-#     #setup PLL output array
-#     pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-#     loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-
-#     for index,sample in enumerate(ffc_input):
-#         #generate VCO signal
-#         vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
-#         vco_output = np.exp(1j*vco_curr_phase)
-#         #mix VCO and input signals
-#         loop_filter_input = vco_output * sample
-#         loop_filter_input_array[index] = loop_filter_input
-#         loop_filter_output, loop_filter_state = signal.lfilter(filter,1, [loop_filter_input], zi=loop_filter_state, axis=-1)
-#         #store loop filter output
-#         pll_output_array[index] = loop_filter_output[-1]
-#         #update VCO
-#         vco_curr_freq = vco_gain * loop_filter_output[-1]
-#     return pll_output_array
-
 ffc_input = cfc_output[6219:6676]
 #FFC 
 
+#low-pass loop filter coeffs; f_pass = 400 kHz f_stop = 500kHz Fs = 1 MHz
 b_coefs = [-0.00114093652672, 0.003031662114114,-0.006736727393132,  0.01305215679029,
    -0.02316499056452,  0.03891083953857, -0.06378018843891,   0.1064967279171,
     -0.1991002073262,   0.6321452786969,   0.6321452786969,  -0.1991002073262,
@@ -134,9 +101,6 @@ b_coefs = [-0.00114093652672, 0.003031662114114,-0.006736727393132,  0.013052156
     0.01305215679029,-0.006736727393132, 0.003031662114114, -0.00114093652672]
 
 #initialize DPLL
-vco_curr_phase = 0
-vco_curr_freq = 0 #this is in hz
-vco_gain = 0.1 #how do we set this?
 loop_filter_cutoff = 500e3
 
 #setup loop filter
@@ -147,19 +111,6 @@ print('running PLL')
 #setup PLL output array
 pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-
-# for index,sample in enumerate(ffc_input):
-#     #generate VCO signal
-#     vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
-#     vco_output = np.exp(1j*vco_curr_phase)
-#     #mix VCO and input signals
-#     loop_filter_input = vco_output * sample
-#     loop_filter_input_array[index] = loop_filter_input
-#     loop_filter_output, zf = signal.lfilter(b,a, loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
-#     #store loop filter output
-#     pll_output_array[index] = loop_filter_output[-1]
-#     #update VCO
-#     vco_curr_freq += vco_gain * loop_filter_output[-1]
 
 # New Error Calculations
 
@@ -190,8 +141,7 @@ for index,sample in enumerate(ffc_input):
         error = np.angle(error_bin_1)
         binary_out.append(1)
         error_out.append(error_bin_1)
-    # normalized_output.append(loop_filter_output[-1]/abs(loop_filter_output[-1]))
-  
+    
     
 # plt.figure()
 # plt.scatter([-1+0j, 1+0j], error_out)
@@ -218,4 +168,3 @@ plt.title('PLL Output - Phase')
 plt.plot(timescale2,np.angle(pll_output_array))
 plt.show()
 
-preamble = [1, 0, 1, 0, 1, 0, 1, 0]
