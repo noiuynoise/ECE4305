@@ -90,39 +90,39 @@ cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
 '''
 
-def runpll(ffc_input, vco_gain):
-    #initialize DPLL
-    vco_curr_phase = 0
-    vco_curr_freq = 250e3 #this is in hz - starting frequency
-    #vco_gain = 10 #do math to find this
+# def runpll(ffc_input, vco_gain):
+#     #initialize DPLL
+#     vco_curr_phase = 0
+#     vco_curr_freq = 250e3 #this is in hz - starting frequency
+#     #vco_gain = 10 #do math to find this
 
-    #setup loop filter
-    N = 11  # number of taps in the filter
-    a = 100e3  # width of the transition band
-    fc = 500e3 # cutoff frequency
+#     #setup loop filter
+#     N = 11  # number of taps in the filter
+#     a = 100e3  # width of the transition band
+#     fc = 500e3 # cutoff frequency
 
-    # design a halfband symmetric low-pass filter
-    filter = signal.firls(N, [0, fc, fc+a, sample_rate/2], [1, 1, 0, 0], fs=sample_rate)
-    loop_filter_state = signal.lfilter_zi(filter, 1)
+#     # design a halfband symmetric low-pass filter
+#     filter = signal.firls(N, [0, fc, fc+a, sample_rate/2], [1, 1, 0, 0], fs=sample_rate)
+#     loop_filter_state = signal.lfilter_zi(filter, 1)
 
-    print('running PLL')
-    #setup PLL output array
-    pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-    loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+#     print('running PLL')
+#     #setup PLL output array
+#     pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+#     loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 
-    for index,sample in enumerate(ffc_input):
-        #generate VCO signal
-        vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
-        vco_output = np.exp(1j*vco_curr_phase)
-        #mix VCO and input signals
-        loop_filter_input = vco_output * sample
-        loop_filter_input_array[index] = loop_filter_input
-        loop_filter_output, loop_filter_state = signal.lfilter(filter,1, [loop_filter_input], zi=loop_filter_state, axis=-1)
-        #store loop filter output
-        pll_output_array[index] = loop_filter_output[-1]
-        #update VCO
-        vco_curr_freq = vco_gain * loop_filter_output[-1]
-    return pll_output_array
+#     for index,sample in enumerate(ffc_input):
+#         #generate VCO signal
+#         vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
+#         vco_output = np.exp(1j*vco_curr_phase)
+#         #mix VCO and input signals
+#         loop_filter_input = vco_output * sample
+#         loop_filter_input_array[index] = loop_filter_input
+#         loop_filter_output, loop_filter_state = signal.lfilter(filter,1, [loop_filter_input], zi=loop_filter_state, axis=-1)
+#         #store loop filter output
+#         pll_output_array[index] = loop_filter_output[-1]
+#         #update VCO
+#         vco_curr_freq = vco_gain * loop_filter_output[-1]
+#     return pll_output_array
 
 ffc_input = cfc_output
 #FFC 
@@ -162,6 +162,8 @@ binary_1 = 1+0j #this is the base line
 binary_0 = -1+0j
 error = 0
 binary_out = []
+error_out = []
+normalized_output = []
 for index,sample in enumerate(ffc_input):
     #generate VCO signal
     DFS_output = np.exp(1j*2*math.pi*center_freq+error)
@@ -172,21 +174,32 @@ for index,sample in enumerate(ffc_input):
     #store loop filter output
     pll_output_array[index] = loop_filter_output[-1]
     #update VCO
-    error_bin_1 = loop_filter_output[-1] - binary_1*abs(loop_filter_output[-1])
-    error_bin_0 = loop_filter_output[-1] - binary_0*abs(loop_filter_output[-1])
-    error = np.minimum(error_bin_0,error_bin_1)
-    binary_out.append(0 if error == error_bin_0 else 1)
+    error_bin_1 = loop_filter_output[-1] - binary_1 *abs(loop_filter_output[-1])
+    error_bin_0 = loop_filter_output[-1] - binary_0 *abs(loop_filter_output[-1])
+    error = np.minimum(abs(error_bin_0),abs(error_bin_1))
+    if error == abs(error_bin_0):
+        error = np.angle(error_bin_0)
+        binary_out.append(0)
+        error_out.append(error_bin_0)
+    else:
+        error = np.angle(error_bin_1)
+        binary_out.append(1)
+        error_out.append(error_bin_1)
+    # normalized_output.append(loop_filter_output[-1]/abs(loop_filter_output[-1]))
+  
     
+# plt.figure()
+# plt.scatter([-1+0j, 1+0j], error_out)
+# plt.title('Error Out')
 
-
-
-
+print(binary_out)
 
 print('plotting')
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 #ax.title('Loop Filter Output')
-ax.scatter3D(timescale[22000:24000], np.real(pll_output_array[22000:24000]), np.imag(pll_output_array[22000:24000]))
+ax.scatter3D(timescale, np.real(pll_output_array), np.imag(pll_output_array))
+# ax.scatter3D(timescale, np.real(normalized_output), np.imag(normalized_output))
 plt.figure()
 plt.title('PLL Output')
 plt.plot(timescale[50:],np.imag(pll_output_array[50:])/np.amax(pll_output_array[50:]))
