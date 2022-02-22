@@ -148,6 +148,12 @@ for index,sample in enumerate(ffc_input):
 # plt.title('Error Out')
 
 print(binary_out)
+print(len(binary_out))
+for i in range(int(len(binary_out)/2)):
+    sym_1 = binary_out[i*2]
+    sym_2 = binary_out[i*2+1]
+    bit = [sym_1,sym_2]
+    print(bit)
 
 print('plotting')
 
