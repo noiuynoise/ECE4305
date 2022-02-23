@@ -5,18 +5,17 @@ from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
 
 
-sample_rate = 1e6 # Hz
+sample_rate = 2e6 # Hz
 center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
 #load in sample data
 data = np.fromfile('recorded.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
-#frequency shift sampled data for testing
-data = data*np.exp(2j * np.pi * 250e3 * timescale)
-#optional - generate fake data
-#timescale = np.arange(0, 0.02, 1/sample_rate)
-#data = np.exp(2j * np.pi * 250e3 * timescale) + 0.25 * np.exp(2j * np.pi * 50e3 * timescale)
+'''optional - generate fake data
+timescale = np.arange(0, 0.02, 1/sample_rate)
+data = np.exp(2j * np.pi * 250e3 * timescale) + 0.25 * np.exp(2j * np.pi * 50e3 * timescale)
+'''
 print('running CFC')
 #raised cosine / low pass filter
 #TODO
@@ -90,70 +89,51 @@ cfc_data = np.rot90(cfc_data)
 plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
 '''
 
-ffc_input = cfc_output[6219:6676]
+ffc_input = cfc_output
 #FFC 
 
-#low-pass loop filter coeffs; f_pass = 400 kHz f_stop = 500kHz Fs = 1 MHz
-b_coefs = [-0.00114093652672, 0.003031662114114,-0.006736727393132,  0.01305215679029,
-   -0.02316499056452,  0.03891083953857, -0.06378018843891,   0.1064967279171,
-    -0.1991002073262,   0.6321452786969,   0.6321452786969,  -0.1991002073262,
-     0.1064967279171, -0.06378018843891,  0.03891083953857, -0.02316499056452,
-    0.01305215679029,-0.006736727393132, 0.003031662114114, -0.00114093652672]
-
 #initialize DPLL
-loop_filter_cutoff = 500e3
+vco_curr_phase = 0
+vco_gain = 10 #do math to find this
 
 #setup loop filter
-loop_filter_state = signal.lfilter_zi(b_coefs, [1])
+N = 11  # number of taps in the filter
+a = 100e3  # width of the transition band
+fc = 200e3 # cutoff frequency
+
+# design a halfband symmetric low-pass filter
+filter = signal.firls(N, [0, fc, fc+a, sample_rate/2], [1, 1, 0, 0], fs=sample_rate)
+loop_filter_state = signal.lfilter_zi(filter, 1)
 
 print('running PLL')
-
 #setup PLL output array
 pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 
-# New Error Calculations
+phase_ideal = [0, np.pi/2, np.pi, 3*np.pi/2]
 
-binary_1 = 1+0j #this is the base line
-binary_0 = -1+0j
-error = 0
-binary_out = []
-error_out = []
-normalized_output = []
+def error_func(phase_ideal, curr_phase):
+    min_error = 2*np.pi
+    for phase in phase_ideal:
+        pos_error = phase + phase_ideal
+        neg_error = phase - phase_ideal
+
 for index,sample in enumerate(ffc_input):
+
+
+
+
     #generate VCO signal
-    DFS_output = np.exp(1j*2*math.pi*1e6+error)
+    vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
+    vco_output = np.exp(1j*vco_curr_phase)
     #mix VCO and input signals
-    loop_filter_input = DFS_output * sample
+    loop_filter_input = vco_output * sample
     loop_filter_input_array[index] = loop_filter_input
-    loop_filter_output, zf = signal.lfilter(b_coefs,[1], loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
+    loop_filter_output, loop_filter_state = signal.lfilter(filter,1, [loop_filter_input], zi=loop_filter_state, axis=-1)
     #store loop filter output
     pll_output_array[index] = loop_filter_output[-1]
     #update VCO
-    error_bin_1 = loop_filter_output[-1] - binary_1 *abs(loop_filter_output[-1])
-    error_bin_0 = loop_filter_output[-1] - binary_0 *abs(loop_filter_output[-1])
-    error = np.minimum(abs(error_bin_0),abs(error_bin_1))
-    if error == abs(error_bin_0):
-        error = np.angle(error_bin_0)
-        binary_out.append(0)
-        error_out.append(error_bin_0)
-    else:
-        error = np.angle(error_bin_1)
-        binary_out.append(1)
-        error_out.append(error_bin_1)
-    
-    
-# plt.figure()
-# plt.scatter([-1+0j, 1+0j], error_out)
-# plt.title('Error Out')
-
-print(binary_out)
-print(len(binary_out))
-for i in range(int(len(binary_out)/2)):
-    sym_1 = binary_out[i*2]
-    sym_2 = binary_out[i*2+1]
-    bit = [sym_1,sym_2]
-    print(bit)
+    vco_curr_freq = vco_gain * loop_filter_output[-1]
 
 print('plotting')
 
