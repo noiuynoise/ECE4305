@@ -106,7 +106,7 @@ plt.imshow(pre_cfc_data,extent=[-sample_rate/2, sample_rate/2,cfc_waterfall_bins
 
 
 ffc_input = cfc_output
-
+plt.show()
 # t = np.arange(0,len(data))
 num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.006912181652354,
    0.009615955044781,-0.009791312677446,-0.009167351758746,  0.01465913219682,
@@ -119,44 +119,3 @@ num_coef = [-0.006991626021578, -0.01754311971686, -0.01272215069694, 0.00691218
     0.01465913219682,-0.009167351758746,-0.009791312677446, 0.009615955044781,
    0.006912181652354, -0.01272215069694, -0.01754311971686,-0.006991626021578]
 
-mixed_signal = []
-data_out = []
-for t in range(len(data)):
-  
-   if t == 0:
-      VCO_sig_out_start = exp(1j*2*math.pi*2426e6*t/2e6)
-      mixed_signal.append(ffc_input[0] * VCO_sig_out_start)
-      data_out.append(ffc_input[t]*VCO_sig_out_start)
-   else:
-      mixed_signal.append(ffc_input[t] * VCO_sig_out_loop)
-      data_out.append(ffc_input[t]*VCO_sig_out_loop)
-
-   # plt.figure(3)
-   # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-   # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(mixed_signal))))
-
-   # LPF GOES HERE 
-
-   LPF_output = signal.lfilter(num_coef, 1, mixed_signal)
-   
-
-   #take output of LPF
-   theta_error = np.sign(np.cos(np.real(LPF_output[t])))*np.sin(np.real(LPF_output[t])) - np.sign(np.sin(np.real(LPF_output[t])))*np.cos(np.real(LPF_output[t]))
-   # theta_error = 2*np.arccos(LPF_output[t])
-   #which gives theta error for each point
-   #put theta error back in as the phase for the mixer
-   VCO_sig_out_loop =  exp(1j*2*math.pi*2426e6*t/2e6 + theta_error)
-   #loop
-
-   # plt.figure(5)
-   # x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-   # plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(VCO_sig_out_loop))))
-
-
-plt.figure(5)
-x_scale2 = np.linspace(-sample_rate/2, sample_rate/2, num=data.size)
-plt.plot(x_scale2, abs(np.fft.fftshift(np.fft.fft(data_out))))
-
-plt.figure(6)
-plt.plot(data_out)
-plt.show()
