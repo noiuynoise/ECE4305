@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import math
 from scipy import signal 
 
-sample_rate = 2e6 # Hz
+sample_rate = 1e6 # Hz
 center_freq = 2426e6 
 
-rx_bw = 2e6
+rx_bw = 1e6
 
 sdr = adi.Pluto("ip:192.168.2.1")
 sdr.sample_rate = int(sample_rate)
@@ -26,7 +26,7 @@ data = sdr.rx()
 print('got data')
 
 data = data.astype(np.complex64)
-data.tofile('recorded.iq')
+data.tofile('recorded_1MHz_3.iq')
 
 x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq, num=data.size)
 plt.figure(1)

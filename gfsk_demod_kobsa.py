@@ -6,12 +6,12 @@ from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
 
 
-sample_rate = 2e6 # Hz
+sample_rate = 1e6 # Hz
 center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
 #load in sample data
-data = np.fromfile('recorded.iq', np.complex64)
+data = np.fromfile('recorded_1MHz_3.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
 #frequency shift sampled data for testing
 # data = data*np.exp(2j * np.pi * 250e3 * timescale)
@@ -92,10 +92,12 @@ plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample
 '''
 
 
-start_samp = 28470
-end_samp = 29300
+start_samp = 19260
+end_samp = 19580
 ffc_input = cfc_output[start_samp:end_samp]
-phase_input = np.arctan(np.imag(ffc_input)/np.real(ffc_input))
+#phase_input = np.arctan(np.imag(ffc_input)/np.real(ffc_input))
+phase_input = np.angle(ffc_input)
+print(phase_input)
 plt.figure()
 plt.plot(ffc_input)
 plt.title('ffc_input')
@@ -103,80 +105,98 @@ plt.figure()
 plt.plot(phase_input)
 plt.title('phase_input')
 
+#timescale2 = np.linspace(0, (ffc_input.size/10) / sample_rate, num=len(ffc_input/10))
+# fig = plt.figure()
+# ax = plt.axes(projection='3d')
+# ax.scatter3D(np.arange(10), np.real(ffc_input[50:60]), np.imag(ffc_input[50:60]))
+
+
 print('running PLL')
 
-#FFC 
-b_coefs = signal.firls(31, [0, 490e3, 510e3, 1e6],[1, 1, 0, 0], fs=2e6)
-high_b_co = signal.firls(19, [0, 200, 300, 1e6],[1, 1, 0, 0], fs=2e6)
+# #FFC 
+# b_coefs = signal.firls(31, [0, 500e3, 510e3, 1e6],[1, 1, 0, 0], fs=2e6)
+# # high_b_co = signal.firls(19, [0, 2000, 2100, 1e6],[1, 1, 0, 0], fs=2e6)
 
-#setup loop filter
-# loop_filter_state = signal.lfilter_zi(b_coefs, [1])
+# # #setup loop filter
+# # # loop_filter_state = signal.lfilter_zi(b_coefs, [1])
 
-#setup PLL output array
-pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-bias_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-bias_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-# New Error Calculations
+# # #setup PLL output array
+# pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+# loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+# # bias_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+# # bias_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+# # # New Error Calculations
 
 
-error = 0
+current_symbol = 0
 binary_out = []
-error_out = []
-ideal_phase = [0, np.pi]
-recieved_phase = 0
-desicsion_phase = np.pi/2
-for index in range(len(ffc_input)):
-    # current_phase = recieved_phase
-    # recieved_phase = np.angle(sample)
-    # phase_error = recieved_phase - current_phase
-    # if phase_error <= desicsion_phase:
-    #     binary_out.append(0)
-    # if phase_error > desicsion_phase:
-    #     binary_out.append(1)
+phase_dif_2 = []
+previous_phase = 0
+lower_decision_phase = np.pi/2
+upper_decision_phase = 2*np.pi-lower_decision_phase
+print(len(phase_input))
+for index in range(len(phase_input)):
+    current_phase = phase_input[index]
+    previous_phase = phase_input[index-1]
+    phase_dif = abs(abs(current_phase) - abs(previous_phase))
+    phase_dif_2.append(phase_dif)
+    if phase_dif > lower_decision_phase and phase_dif < upper_decision_phase:
+        symbol_change = True
+    else:
+        symbol_change = False
 
-    #generate VCO signal
-    # DFS_output = np.exp(1j*2*math.pi*2e6+error)
-    #mix VCO and input signals
-    # loop_filter_input = DFS_output * sample
-    loop_filter_input_array[index] = phase_input[index]
-    loop_filter_output = signal.lfilter(b_coefs,[1],loop_filter_input_array[0:index+1])
-    # loop_filter_output, zf = signal.lfilter(b_coefs,[1], loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
-    #store loop filter output
-    pll_output_array[index] = loop_filter_output[-1]
-    bias_input_array[index] = loop_filter_output[-1]
-    bias_output = signal.lfilter(b_coefs,[1],bias_input_array[0:index+1])
-    bias_output_array[index] = bias_output[-1]
-    #update VCO
+    if symbol_change == True:
+        current_symbol = 1 if current_symbol == 0 else 0
+        binary_out.append(current_symbol)
+    else:
+        binary_out.append(current_symbol)
+plt.figure()
+plt.plot(np.arange(len(phase_dif_2)),phase_dif_2)
+plt.title('phase_dif')     
+        
+#     #generate VCO signal
+#     # DFS_output = np.exp(1j*2*math.pi*2e6+error)
+#     #mix VCO and input signals
+#     # loop_filter_input = DFS_output * sample
+#     loop_filter_input_array[index] = phase_input[index]
+#     loop_filter_output = signal.lfilter(b_coefs,[1],loop_filter_input_array[0:index+1])
+#     # loop_filter_output, zf = signal.lfilter(b_coefs,[1], loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
+#     #store loop filter output
+#     pll_output_array[index] = loop_filter_output[-1]
+#     bias_input_array[index] = loop_filter_output[-1]
+#     bias_output = signal.lfilter(high_b_co,[1],bias_input_array[0:index+1])
+#     bias_output_array[index] = bias_output[-1]
+#     #update VCO
 
-plt.figure()
-plt.plot(pll_output_array)   
-plt.title('pll_output_array')    
-plt.figure()
-plt.plot(bias_output_array)   
-plt.title('bias_output_array')   
-plt.figure()
-plt.plot(pll_output_array-bias_output_array)   
-plt.title('PLL - bias')     
-# ones = 0
-# zeros = 0
-# print(binary_out)
-# print(len(binary_out))
-# for i in range(int(len(binary_out)/2)):
-#     sym_1 = binary_out[i*2]
-#     sym_2 = binary_out[i*2+1]
-#     if sym_1 == 1:
-#         ones += 1
-#     if sym_2 == 1:
-#         ones += 1
-#     if sym_1 == 0:
-#         zeros += 1
-#     if sym_2 == 0:
-#         zeros += 1
-#     bit = [sym_1,sym_2]
-# print(ones)
-# print(zeros)
-# print('plotting')
+# plt.figure()
+# plt.plot(pll_output_array)   
+# plt.title('pll_output_array')    
+# plt.figure()
+# plt.plot(bias_output_array)   
+# plt.title('bias_output_array')   
+# plt.figure()
+# plt.plot(pll_output_array-bias_output_array)   
+# plt.title('PLL - bias')     
+ones = 0
+zeros = 0
+print(binary_out)
+print(len(binary_out))
+for i in range(int(len(binary_out)/2)):
+    sym_1 = binary_out[i*2]
+    sym_2 = binary_out[i*2+1]
+    if sym_1 == 1:
+        ones += 1
+    if sym_2 == 1:
+        ones += 1
+    if sym_1 == 0:
+        zeros += 1
+    if sym_2 == 0:
+        zeros += 1
+    bit = [sym_1,sym_2]
+    print(bit)
+print(ones)
+print(zeros)
+print('plotting')
 
 
 # timescale2 = np.linspace(0, ffc_input.size / sample_rate, num=len(binary_out))
