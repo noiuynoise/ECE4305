@@ -107,6 +107,7 @@ print('running PLL')
 
 #FFC 
 b_coefs = signal.firls(31, [0, 490e3, 510e3, 1e6],[1, 1, 0, 0], fs=2e6)
+high_b_co = signal.firls(19, [0, 200, 300, 1e6],[1, 1, 0, 0], fs=2e6)
 
 #setup loop filter
 # loop_filter_state = signal.lfilter_zi(b_coefs, [1])
@@ -114,7 +115,8 @@ b_coefs = signal.firls(31, [0, 490e3, 510e3, 1e6],[1, 1, 0, 0], fs=2e6)
 #setup PLL output array
 pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 loop_filter_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
-
+bias_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+bias_input_array = np.zeros(ffc_input.shape, dtype=np.complex64)
 # New Error Calculations
 
 
@@ -142,12 +144,20 @@ for index in range(len(ffc_input)):
     # loop_filter_output, zf = signal.lfilter(b_coefs,[1], loop_filter_input_array[0:index+1], zi=loop_filter_state, axis=-1)
     #store loop filter output
     pll_output_array[index] = loop_filter_output[-1]
+    bias_input_array[index] = loop_filter_output[-1]
+    bias_output = signal.lfilter(b_coefs,[1],bias_input_array[0:index+1])
+    bias_output_array[index] = bias_output[-1]
     #update VCO
 
 plt.figure()
 plt.plot(pll_output_array)   
 plt.title('pll_output_array')    
-
+plt.figure()
+plt.plot(bias_output_array)   
+plt.title('bias_output_array')   
+plt.figure()
+plt.plot(pll_output_array-bias_output_array)   
+plt.title('PLL - bias')     
 # ones = 0
 # zeros = 0
 # print(binary_out)
