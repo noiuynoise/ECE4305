@@ -2,7 +2,7 @@ import numpy as np
 import adi
 import matplotlib.pyplot as plt
 
-sample_rate = 2e6 # Hz
+sample_rate = 1e6 # Hz
 center_freq = 2480e6 #107.9e6 # Hz
 
 rx_bw = 1e6
@@ -12,11 +12,12 @@ sdr.sample_rate = int(sample_rate)
 sdr.rx_rf_bandwidth = int(rx_bw) # filter cutoff, just set it to the same as sample rate
 sdr.rx_lo = int(center_freq)
 
-buffer_length = 1024*32
+buffer_length = 1024*16
 
 sdr.rx_buffer_size = buffer_length # this is the buffer the Pluto uses to buffer samples
 
-sdr.gain_control_mode_chan0 = "slow_attack"
+sdr.gain_control_mode_chan0 = "manual"
+sdr.rx_hardwaregain_chan0 = 70.0
 
 data = sdr.rx()
 
@@ -36,5 +37,12 @@ for index, bin in enumerate(waterfall_bins):
     img_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
 
 plt.imshow(img_data, aspect='auto')
+
+timescale = np.arange(0,data.size)
+
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+ax.set_title('Sampled Data')
+ax.scatter3D(timescale, np.real(data), np.imag(data))
 
 plt.show()
