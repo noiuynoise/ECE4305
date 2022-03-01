@@ -136,15 +136,20 @@ for index,sample in enumerate(ffc_input):
     vco_curr_freq = vco_gain * loop_filter_output[-1]
 
 print('plotting')
-
 timescale2 = np.linspace(0, ffc_input.size / sample_rate, num=457)
+
+plt.figure()
+plt.title('input FFT')
+plt.plot(np.abs(np.fft.fftshift(np.fft.fft(ffc_input))))
+
+
 plt.figure()
 plt.title('PLL Input')
 plt.plot(timescale2,np.imag(ffc_input)/np.amax(ffc_input))
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 #ax.title('Loop Filter Output')
-ax.scatter3D(timescale2, np.real(pll_output_array), np.imag(pll_output_array))
+ax.scatter3D(timescale2, np.real(ffc_input), np.imag(ffc_input))
 # ax.scatter3D(timescale, np.real(normalized_output), np.imag(normalized_output))
 plt.figure()
 plt.title('PLL Output')
