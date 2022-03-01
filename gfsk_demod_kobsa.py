@@ -94,16 +94,21 @@ print(num_packets)
 
 #Pruning False IDs
 num_removed = 0
+packet_buffer = 50
 for i in range(len(start_of_packet)):
     if end_of_packet[i-num_removed]-start_of_packet[i-num_removed] < 200:
         del start_of_packet[i-num_removed]
         del end_of_packet[i-num_removed] 
         num_packets -= 1
         num_removed += 1
+    else:
+        start_of_packet[i-num_removed] = start_of_packet[i-num_removed] - packet_buffer
+        end_of_packet[i-num_removed] = end_of_packet[i-num_removed] + packet_buffer
 print(start_of_packet)
 print(end_of_packet)
 print(num_packets)
 
+    
 plt.figure()
 plt.plot(area_list)
 plt.title('area')
