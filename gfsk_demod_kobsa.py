@@ -8,12 +8,12 @@ from scipy import signal
 from scipy import integrate
 
 
-sample_rate = 2e6 # Hz
+sample_rate = 1e6 # Hz
 center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
 #load in sample data
-data = np.fromfile('recorded_1MHz.iq', np.complex64)
+data = np.fromfile('recorded_good_3.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
 #frequency shift sampled data for testing
 # data = data*np.exp(2j * np.pi * 250e3 * timescale)
@@ -89,15 +89,14 @@ for i in range(len(data)):
 
     mean_area_list.append(mean_area)
 
-print(start_of_packet)
-print(end_of_packet)
-print(num_packets)
 
 #Pruning False IDs
 num_removed = 0
-packet_buffer = 50
+packet_buffer = 10
 for i in range(len(start_of_packet)):
-    if end_of_packet[i-num_removed]-start_of_packet[i-num_removed] < 200:
+    start = start_of_packet[i-num_removed]
+    end = end_of_packet[i-num_removed]
+    if end-start < 100 or np.amax(area_list[start:end]) < np.amax(area_list)/2:
         del start_of_packet[i-num_removed]
         del end_of_packet[i-num_removed] 
         num_packets -= 1
