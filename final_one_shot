@@ -6,7 +6,9 @@ import scipy
 from helper_funcs import butter_lowpass_filter, butter_lowpass
 from scipy import signal 
 from scipy import integrate
-
+import numpy as np
+from dataclasses import dataclass
+from re import TEMPLATE, X
 
 sample_rate = 1e6 # Hz
 center_freq = 2426e6 # Hz
@@ -83,4 +85,405 @@ plt.title('Data')
 plt.xlabel('Samples')
 plt.ylabel('Real Value of Input Data')
 
+
+sample_rate = 1e6 # Hz
+center_freq = 2480e6 # Hz
+fft_size = 2**14
+modulation_index = 0.5
+#load in sample data
+data = np.fromfile('recorded_good_3.iq', np.complex64)
+timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
+print('running CFC')
+#raised cosine / low pass filter
+#TODO
+
+#find the start and end of the packet(s) - power based
+rx_power = np.power(np.abs(data), 2)
+#now low pass - 100khz should remove noise but not packet?
+rx_power_lp = butter_lowpass_filter(rx_power, 100e3, sample_rate, order=3)
+#if power > threshold set start and end of packet
+#threshold is avg power?
+avg_power = np.sum(rx_power)/rx_power.size
+#plt.plot(timescale,rx_power_lp)
+#plt.plot(timescale, np.full(rx_power_lp.shape, avg_power))
+#now find all packets contained
+packets = []
+index = 0
+while index < rx_power_lp.size:
+    if rx_power_lp[index] > avg_power:
+        #start of packet found
+        start_sample = index - 20
+        if start_sample < 0:
+            start_sample = 0
+        #now find end
+        end_sample = rx_power_lp.size -1
+        while index < end_sample:
+            index += 1
+            if rx_power_lp[index] < avg_power:
+                #found end of packet
+                end_sample = index + 20
+                if end_sample > (rx_power_lp.size - 1):
+                    end_sample = rx_power_lp.size -1
+                break
+        packets.append((start_sample, end_sample))
+    index += 1
+
+#CFC function
+def cfc_packet(packet, samp_rate, mod_index):
+    packet_no_modulation = np.power(packet, mod_index)
+    freq_range = np.linspace(-samp_rate/2, samp_rate/2, num=packet_no_modulation.size)
+    fft_bins = np.fft.fftshift(np.fft.fft(packet_no_modulation))
+    bin_sum = np.sum(np.abs(fft_bins))
+    curr_sum = 0
+    curr_index = 0
+    while(curr_sum < bin_sum/2):
+        curr_sum += np.abs(fft_bins[curr_index])
+        curr_index += 1
+    freq_offset = freq_range[curr_index]
+    #now shift signal
+    freq_shift_timescale = np.arange(0, packet_no_modulation.size/samp_rate, 1/samp_rate)
+    freq_shift_timescale = freq_shift_timescale[0:packet_no_modulation.size]
+    print(f'frequency shifting by {freq_offset}')
+    freq_shift = np.exp(-1j*np.pi*freq_offset*freq_shift_timescale)
+    #plt.plot(freq_range, np.abs(fft_bins))
+    #plt.plot([freq_offset,freq_offset], [0, 1500])
+    #plt.title('CFC FFT Bins and Chosen Center')
+    #plt.show()
+    return freq_offset
+#now perform CFC on all packets
+corrected_packets = []
+for packet in packets:
+    corrected_packets.append((packet[0], packet[1],data[packet[0]:packet[1]], cfc_packet(data[packet[0]:packet[1]], sample_rate, modulation_index)))
+
+#PLL function
+def runpll(ffc_input, vco_p_gain, vco_phase_gain, freq_init):
+    #initialize DPLL
+    vco_curr_phase = np.angle(ffc_input[0])
+    vco_curr_freq = -1 * freq_init #+ 250e3 #this is in hz - starting frequency
+    vco_integrator = 0
+
+    #phases for clusters
+    #cluster_phases = [np.pi/2, -1*np.pi/2]
+    #cluster_phases = [0, np.pi, -1*np.pi]
+    cluster_phases = [0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi]
+    #cluster_phases = [0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi, 5*np.pi/4, 3*np.pi/2, 7*np.pi/4, 2*np.pi]
+    
+    #setup PLL output array
+    pll_output_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+    error_array = np.zeros(ffc_input.shape, dtype=np.complex64)
+    for index,sample in enumerate(ffc_input):
+        #generate VCO signal
+        vco_curr_phase += vco_curr_freq * 2 * np.pi / sample_rate
+        #vco_curr_phase = np.mod(vco_curr_phase, np.pi)
+        #calculate phase-shifted input
+        input_phase = np.angle(sample) + vco_curr_phase
+        #store PLL output
+        pll_output_array[index] = np.abs(sample) * np.exp(1j*input_phase)
+        #phase comparison
+        min_error = 2*np.pi
+        for phase in cluster_phases:
+            error = input_phase - phase
+            while error > np.pi:
+                error -= 2*np.pi
+            while error < -1 * np.pi:
+                error += 2*np.pi
+            if np.abs(min_error) > np.abs(error):
+                min_error = error
+
+        error_array[index] = min_error
+        vco_integrator += min_error
+        #update VCO
+        vco_curr_freq -= vco_p_gain * min_error
+
+
+    print(f'end FFC frequency: {vco_curr_freq}')
+
+    return pll_output_array, error_array
+
+
+
+packet_to_decode = corrected_packets[0]
+packet_avg_power = np.sum(np.power(np.abs(corrected_packets[0][2]), 2))/corrected_packets[0][2].size
+for index, packet in enumerate(corrected_packets):    
+    new_packet_avg_power = np.sum(np.power(np.abs(packet[2]), 2))/packet[2].size
+    print(f'found packet {index} with length {packet[1] - packet[0]} and avg power {new_packet_avg_power}')
+
+    if new_packet_avg_power > packet_avg_power:
+        packet_to_decode = packet
+        packet_avg_power = new_packet_avg_power
+        print(f'packet{index} is more powerful with avg power {new_packet_avg_power}')
+
+packet_start = 0
+packet_end = packet_to_decode[1] - packet_to_decode[0]
+
+
+
+cfc_output = packet_to_decode[2]
+
+pll_output_array, error_array = runpll(cfc_output, 89125,0, packet_to_decode[3])
+
+
+plot_start = 0
+plot_end = packet_to_decode[1] - packet_to_decode[0] 
+
+def try_pll(packet, kP, kI):
+    pll_output_array, error_array = runpll(packet[2], kP, kI, packet[3])
+    error = np.power(error_array,4)
+    error = butter_lowpass_filter(error, 100e3, sample_rate, order=3)
+    return np.sum(error)
+
+tune_pll = False
+if tune_pll:
+    pll_output_array, error_array = runpll(cfc_output, 0,0, packet_to_decode[3])
+    min_error_sum = np.sum(np.power(error_array[plot_start:plot_end],4))
+    best_params = (0,0)
+
+    #first scan on log scale
+    scan_magnitude = 0
+    for i in np.arange(-10, 5,0.5):
+            print(f'running PLL with parameters {(10.0**i,0)}')
+            error_sum = try_pll(packet_to_decode, 10.0**i, 0)
+            print(f'error sum: {error_sum}')
+            if error_sum < min_error_sum:
+                min_error_sum = error_sum
+                scan_magnitude = i
+                best_params = (10.0**i, 0)
+    
+    #then try values in scale
+    for i in np.arange(-1, 1, 0.01):
+            print(f'running PLL with parameters {(10.0**(i+scan_magnitude),0)}')
+            error_sum = try_pll(packet_to_decode, 10.0**(i+scan_magnitude), 0)
+            print(f'error sum: {error_sum}')
+            if error_sum < min_error_sum:
+                min_error_sum = error_sum
+                best_params = (10.0**(i+scan_magnitude), 0)
+
+    print(f'best parameters: {best_params} with error sum of {min_error_sum}')
+
+    pll_output_array, error_array = runpll(cfc_output, best_params[0], best_params[1], packet_to_decode[3])
+
+#phase detector for bit detection
+#the output should be oriented so decision boundary is imaginary axis. we can just read the real value for binary data
+binary_data = np.zeros(pll_output_array.shape, dtype=np.byte)
+for index, sample in enumerate(pll_output_array):
+    if np.abs(np.real(sample)) > np.abs(np.imag(sample)):
+        if np.real(sample) > 0:
+            binary_data[index] = 0#2
+    else:
+        if np.imag(sample) > 0:
+            binary_data[index] = 1
+        else:
+            binary_data[index] = 1#3
+
+binary_data_delta = np.zeros(pll_output_array.shape, dtype=np.byte)
+last_bit = binary_data[0]
+for index, sample in enumerate(binary_data):
+    if index == 0:
+        continue
+    if last_bit == sample:
+        binary_data_delta[index] = 1
+    last_bit = sample
+#print(binary_data_delta)
+#'''
+
+
+print('plotting')
+#plt.plot(np.abs(np.fft.fftshift(np.fft.fft(packet_to_decode[2]))))
+#plt.title('input FFT')
+#plt.figure()
+#plt.plot(np.abs(np.fft.fftshift(np.fft.fft(pll_output_array))))
+#plt.title('output FFT')
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+ax.set_title('Frequency Corrected Packet')
+ax.scatter3D(timescale[plot_start:plot_end], np.real(pll_output_array[plot_start:plot_end]), np.imag(pll_output_array[plot_start:plot_end]))
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+ax.set_title('Packet')
+ax.scatter3D(timescale[plot_start:plot_end], np.real(cfc_output), np.imag(cfc_output[packet_start:packet_end]))
+#ax.scatter3D(timescale, np.real(cfc_output), np.imag(pll_output_array[plot_start:plot_end]))
+plt.figure()
+plt.title('DPLL Error')
+plt.plot(timescale[plot_start:plot_end],error_array[plot_start:plot_end])
+plt.figure()
+plt.title('PLL Input - Phase')
+plt.plot(timescale[plot_start:plot_end],np.angle(cfc_output))
+zero_line = np.full(timescale[plot_start:plot_end].shape, 0)
+pi_2_line = np.full(timescale[plot_start:plot_end].shape, np.pi/2)
+pi_line = np.full(timescale[plot_start:plot_end].shape, np.pi)
+neg_pi_2_line = np.full(timescale[plot_start:plot_end].shape, -np.pi/2)
+neg_pi_line = np.full(timescale[plot_start:plot_end].shape, -np.pi)
+plt.plot(timescale[plot_start:plot_end],zero_line)
+plt.plot(timescale[plot_start:plot_end],pi_2_line)
+plt.plot(timescale[plot_start:plot_end],pi_line)
+plt.plot(timescale[plot_start:plot_end],neg_pi_2_line)
+plt.plot(timescale[plot_start:plot_end],neg_pi_line)
+plt.figure()
+plt.title('PLL Output - Phase')
+plt.scatter(timescale[plot_start:plot_end],np.angle(pll_output_array[plot_start:plot_end]))
+zero_line = np.full(timescale[plot_start:plot_end].shape, 0)
+pi_2_line = np.full(timescale[plot_start:plot_end].shape, np.pi/2)
+pi_line = np.full(timescale[plot_start:plot_end].shape, np.pi)
+neg_pi_2_line = np.full(timescale[plot_start:plot_end].shape, -np.pi/2)
+neg_pi_line = np.full(timescale[plot_start:plot_end].shape, -np.pi)
+plt.plot(timescale[plot_start:plot_end],zero_line)
+plt.plot(timescale[plot_start:plot_end],pi_2_line)
+plt.plot(timescale[plot_start:plot_end],pi_line)
+plt.plot(timescale[plot_start:plot_end],neg_pi_2_line)
+plt.plot(timescale[plot_start:plot_end],neg_pi_line)
+plt.figure()
+plt.title('output data')
+plt.plot(timescale[plot_start:plot_end],binary_data)
+binary_data_len = binary_data_delta.size
+binary_data_ones = np.sum(binary_data_delta)
+print(f'{binary_data_len} bits detected with {binary_data_ones} ones, ratio of {binary_data_ones/binary_data_len}')
+print(binary_data)
 plt.show()
+
+
+## Written by Bryce McCue
+## dewhitenen code written by Galahad
+
+# Searches for preambles
+def isPreamble (data, offset):
+    preamble = np.array([0, 1, 0, 1, 0, 1, 0, 1]) # preamble
+    if np.array_equal(data[offset : (offset + preamble.size)], preamble):
+        return 1
+    return 0
+
+# returns a list of possible preambles
+def findPreamble(data):
+    out = np.empty(0, int)
+    print(out)
+    for x in range(0, (data.size - 7)):
+        if isPreamble(data, x):
+            out = np.append(out, x)
+    return out
+
+# Searches for addresses
+def isAddress(data, offset):
+    offset = offset + 8 # compensates for the preamble length
+    address = np.array([0,1,1,0,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1,0,0,0,1,0,1,1,1,0,0,0,1])
+    
+    #address = np.flip(address)
+    if np.array_equal(data[offset : (offset + 32)], address):
+        return 1
+    return 0
+
+# returns index of the start of the address
+def findAddress(data, preamble):
+    for x in range(0, (preamble.size)):
+        if isAddress(data, preamble[x]):
+            return preamble[x]
+    print("Error: No Address Found")
+    quit()
+    return 0
+
+#### Galahad's Code
+#def str_xor(a,b): #returns a list of bits
+#	return list(map(lambda x: 0 if x[0] is x[1] else 1, zip(a,b)))
+
+def bit_xor(a,b): #returns a list of bits
+	return list(map(lambda x: x[0] ^ x[1], zip(a,b)))
+
+def dewhiten_bits(bits, channel_num):
+	front_half = [1,1,0,0]
+	back_half = [1,1,0]
+	if channel_num == 37:
+		back_half = [1,0,1]
+	elif channel_num == 38:
+		back_half = [1,1,0]
+	elif channel_num == 39:
+		back_half = [1,1,1]
+	else:
+		print("you didn't call this correctly")
+		quit()
+	#LSB on left, initialize to [1, channel in binary]
+	current_state = [front_half,back_half] #output of lfsr on right
+	#lfsr_out_str = ""
+	lfsr_out_bit = []
+	for i in range(len(bits)):
+		out_bit = current_state[1][-1]
+		#lfsr_out_str = lfsr_out_str + str(out_bit)
+		lfsr_out_bit.append(out_bit)
+		current_state[1] = [current_state[0][-1] ^ out_bit] + current_state[1][:-1]
+		current_state[0] = [out_bit] + current_state[0][:-1]
+	#return str_xor(bits, lfsr_out_str)
+	return bit_xor(bits, lfsr_out_bit)
+
+##### end of Galahad's code
+
+def decomposeHeader(data, offset):
+    offset += 40
+    print("PDU Type: ", np.flip(data[offset:(offset + 4)]))
+    print("RFU: ", data[(offset + 4):(offset + 6)])
+    print("TxADD: ", data[offset + 6])
+    print("RxADD: ", data[offset + 7])
+    length = np.flip(data[(offset + 8):(offset + 14)])
+    print("Length: ", length)
+    print("Length (dec): ", np.packbits(np.flip(length), bitorder='little'))
+    print("RFU: ", data[(offset + 14):(offset + 16)])
+    print(" ")
+
+def hexPayload(data, offset):
+    offset += 56
+    temp = data[offset:]
+    address = data[offset:(offset + 48)]
+
+    print("Length: ", temp.shape[0]/8)
+    print("address: ", np.flip(address))
+    print(" ")
+
+    print("data")
+    temp = data[offset + 48:]
+
+    size = temp.shape[0]
+
+    while((size % 8) != 0):
+        size = size - 1
+
+    temp = data[offset + 48:(offset + 48 + size)]
+    temp = np.reshape(temp, (6, 8))
+    for x in range(0, temp.shape[0]):
+        temp[x,] = np.flip(temp[x,0:])
+    temp = np.packbits(temp, axis=1)
+    for x in range(0, temp.shape[0]):
+        print(hex(int(temp[x,])))
+    
+## Test Code
+#data = np.array([0,1,0,1,0,1,0,1,0,1,1,0,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1,0,0,0,1,0,1,1,1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0])
+
+## this works Valid packed
+data = np.array([1,1,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,0,0,0,1,1,0,0,1,1,1,0,0,0,1,0,1,0,1,0,1,0,1,1,0,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1,0,0,0,1,0,1,1,1,0,0,0,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,0,0,1,0,0,0,0,1,0,1,0,0,1,0,1,0,0,0,1,1,0,1,1,1,0,1,0,0,0,1,0,0,0,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,1,0,0,0,0,0,1,1,0,1,1,0,1,1,1,0,1,1,0,0,0,0,1,0,0,0,1,0,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1])
+
+#data = np.array([0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1])
+
+#data = np.array([1,1,0,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,0,0,0,1,1,1,0,0,1,0,1,0,1,0,0,1,0,1,1,1,0,0,0,1,1,1,0,0,0,1,1,1,0,0,1,0,1,1,1,1,0,0,0,1,1,0,1,1,1,0,1,0,1,0,1,1,0,1,0,1,0,0,1,0,0,1,1,0,1,1,1,1,1,0,0,0,0,1,1,0,1,1,0,1,0,1,0,0,0,1,1,0,1,0,0,0,0,1,1,0,1,1,1,0,0,1,1,1,1,1,1,0,0,0,0,1,1,0,0,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1])
+
+#data = np.array([0,1,1,0,1,0,0,1,0,0,0,0,0,1,1,1,0,1,0,0,0,1,1,1,0,0,1,1,0,1,1,1,0,0,0,0,0,1,1,0,1,1,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,0,0,0,1,0,0,1,0,1,1,0,1,0,1,1,0,1,1,0,0,1,1,0,1,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1,1,0,0,1,1,0,0,1,1,0,1,1,0,1,0,1,0,0,1,1,1,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,0,1,0,1,1,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1,0,0,0,1,1,1,1,1,0,1,1,1,0,0,0,0,1,0,0,1,0,0,0,0,0,1,1,1,1,0,1,1,1,0,0,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,1,0,0,0,0,1,1,0,1,1,1,1,0,1,0,1,0,0,0,1,1,0,1,1,0,1,0,1,1,0,0,0,1,1,0,0,1,0,0,1,0,1,0,0,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,0,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,1,1,1,0,0,1,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,1,1,0,0,0,1,0,1,1,0,1,0,0,1,1,1,1,0,1,1,1,0,0,1,0,1,1,1,1,1,1,1,1,0,0,1,0,0,0,0,1,0,1,1,0,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,1,1,0,1,1,1,1,0,1,1,0,0,1,0,1,1,1,1,0,1,0,1,1,1,1,0,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,1,0,1,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,1,1,1,0,1,1,0,1,1,1,1,0,0,1,0,0,1,0,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,0,0,1,0,0,1,0,1,1,1,1,0,1,1,1,0,1,0,1,1,1,1,0,0,1,1,0,0,0,1,1,1,1,1,1,1,0,0,1,1,0,0,0,1,1,0,1,1,1,1,0,1,0,0,1,1,1,1,1,1,1,1,0,1,0,1,0,1])
+
+a = findPreamble(data)
+b = findAddress(data, a)
+
+#b = -40
+
+print(b)
+# dedata1 = dewhiten_bits(data, 37)
+dedata2 = dewhiten_bits(data, 38)
+# dedata3 = dewhiten_bits(data, 39)
+
+# dedata1 = data
+# dedata2 = data
+# dedata3 = data
+
+# dedata1 = np.array(dedata1)
+dedata2 = np.array(dedata2)
+# dedata3 = np.array(dedata3)
+
+# decomposeHeader(dedata1, b)
+decomposeHeader(dedata2, b)
+# decomposeHeader(dedata3, b)
+
+# hexPayload(dedata1, b)
+hexPayload(dedata2, b)
+# hexPayload(dedata3, b)
