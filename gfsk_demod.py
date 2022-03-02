@@ -147,11 +147,11 @@ plot_end = packet_to_decode[1] - packet_to_decode[0]
 
 def try_pll(packet, kP, kI):
     pll_output_array, error_array = runpll(packet[2], kP, kI, packet[3])
-    error = np.power(error_array,4)
-    error = butter_lowpass_filter(error, 100e3, sample_rate, order=3)
+    error = butter_lowpass_filter(np.abs(error_array), 100e3, sample_rate, order=3)
+    error = np.power(error, 4)
     return np.sum(error)
 
-tune_pll = False
+tune_pll = True
 if tune_pll:
     pll_output_array, error_array = runpll(cfc_output, 0,0, packet_to_decode[3])
     min_error_sum = np.sum(np.power(error_array[plot_start:plot_end],4))
