@@ -13,7 +13,7 @@ center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
 #load in sample data
-data = np.fromfile('recorded_2MHz.iq', np.complex64)
+data = np.fromfile('recorded_1MHz.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
 #frequency shift sampled data for testing
 # data = data*np.exp(2j * np.pi * 250e3 * timescale)
@@ -80,11 +80,12 @@ for i in range(len(data)):
         start_of_packet.append(i)
     if mean_area < mean_area_list[-1] and packet_present == True:
         packet_present = False
+        end_of_packet.append(i)
         end_flag = 1
 
     if end_flag == 1:
         num_packets += 1
-        end_of_packet.append(i)
+        
 
     mean_area_list.append(mean_area)
 
@@ -114,19 +115,19 @@ plt.plot(area_list)
 plt.title('area')
 plt.figure()
 plt.plot(mean_area_list)
-plt.title('area')
+plt.title('mean area')
 
 
-start_samp = 19260
-end_samp = 19580
+# start_samp = 19260
+# end_samp = 19580
 ffc_input = cfc_output #[start_samp:end_samp]
-phase_input = np.angle(ffc_input) 
+# phase_input = np.angle(ffc_input) 
 plt.figure()
 plt.plot(ffc_input)
 plt.title('ffc_input')
-plt.figure()
-plt.plot(phase_input)
-plt.title('phase_input')
+# plt.figure()
+# plt.plot(phase_input)
+# plt.title('phase_input')
 
 #timescale2 = np.linspace(0, (ffc_input.size/10) / sample_rate, num=len(ffc_input/10))
 # fig = plt.figure()
