@@ -1,0 +1,86 @@
+from cmath import phase
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+import scipy
+from helper_funcs import butter_lowpass_filter, butter_lowpass
+from scipy import signal 
+from scipy import integrate
+
+
+sample_rate = 1e6 # Hz
+center_freq = 2426e6 # Hz
+fft_size = 2**10
+modulation_index = 2
+#load in sample data
+data = np.fromfile('recorded_2MHz.iq', np.complex64)
+timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
+
+area_list = []
+mean_area_list = [0]
+num_packets = 0
+start_of_packet = []
+end_of_packet = []
+packet_present = False
+#Integrator Packet Detecting
+for i in range(len(data)):
+    a = i
+    b = i+20
+    area = sum(abs(data[a:b])**2)
+    area_list.append(area)
+    mean_area = np.mean(area_list)
+    end_flag = 0
+    if mean_area > mean_area_list[-1] and packet_present == False:
+        packet_present = True
+        start_of_packet.append(i)
+    if mean_area < mean_area_list[-1] and packet_present == True:
+        packet_present = False
+        end_of_packet.append(i)
+        end_flag = 1
+
+    if end_flag == 1:
+        num_packets += 1
+        
+
+    mean_area_list.append(mean_area)
+
+
+#Pruning False IDs
+num_removed = 0
+packet_buffer = 10
+for i in range(len(start_of_packet)):
+    start = start_of_packet[i-num_removed]
+    end = end_of_packet[i-num_removed]
+    if end-start < 100 or np.amax(area_list[start:end]) < np.amax(area_list)/2:
+        del start_of_packet[i-num_removed]
+        del end_of_packet[i-num_removed] 
+        num_packets -= 1
+        num_removed += 1
+    else:
+        start_of_packet[i-num_removed] = start_of_packet[i-num_removed] - packet_buffer
+        end_of_packet[i-num_removed] = end_of_packet[i-num_removed] + packet_buffer
+print(start_of_packet)
+print(end_of_packet)
+print(num_packets)
+
+    
+plt.figure()
+plt.plot(area_list)
+plt.title('Power')
+plt.xlabel('Samples')
+plt.ylabel('Power of Past 20 Samples')
+plt.figure()
+plt.plot(mean_area_list)
+plt.title('Mean Power')
+plt.xlabel('Samples')
+plt.ylabel('Mean Power of Past 20 Samples')
+
+
+
+plt.figure()
+plt.plot(data)
+plt.title('Data')
+plt.xlabel('Samples')
+plt.ylabel('Real Value of Input Data')
+
+plt.show()

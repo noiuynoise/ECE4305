@@ -13,7 +13,7 @@ center_freq = 2426e6 # Hz
 fft_size = 2**10
 modulation_index = 2
 #load in sample data
-data = np.fromfile('recorded_good_3.iq', np.complex64)
+data = np.fromfile('recorded_2MHz.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
 #frequency shift sampled data for testing
 # data = data*np.exp(2j * np.pi * 250e3 * timescale)
@@ -111,10 +111,14 @@ print(num_packets)
     
 plt.figure()
 plt.plot(area_list)
-plt.title('area')
+plt.title('Power')
+plt.xlabel('Samples')
+plt.ylabel('Power of Past 20 Samples')
 plt.figure()
 plt.plot(mean_area_list)
-plt.title('mean area')
+plt.title('Mean Power')
+plt.xlabel('Samples')
+plt.ylabel('Mean Power of Past 20 Samples')
 
 
 # start_samp = 19260
@@ -124,6 +128,8 @@ ffc_input = cfc_output #[start_samp:end_samp]
 plt.figure()
 plt.plot(ffc_input)
 plt.title('ffc_input')
+plt.xlabel('Samples')
+plt.ylabel('Real Value of Input Data')
 # plt.figure()
 # plt.plot(phase_input)
 # plt.title('phase_input')
