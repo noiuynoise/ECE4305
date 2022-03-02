@@ -64,6 +64,10 @@ def cfc_packet(packet, samp_rate, mod_index):
     freq_shift_timescale = freq_shift_timescale[0:packet_no_modulation.size]
     print(f'frequency shifting by {freq_offset}')
     freq_shift = np.exp(-1j*np.pi*freq_offset*freq_shift_timescale)
+    #plt.plot(freq_range, np.abs(fft_bins))
+    #plt.plot([freq_offset,freq_offset], [0, 1500])
+    #plt.title('CFC FFT Bins and Chosen Center')
+    #plt.show()
     return freq_offset
 #now perform CFC on all packets
 corrected_packets = []
@@ -71,10 +75,10 @@ for packet in packets:
     corrected_packets.append((packet[0], packet[1],data[packet[0]:packet[1]], cfc_packet(data[packet[0]:packet[1]], sample_rate, modulation_index)))
 
 #PLL function
-def runpll(ffc_input, vco_p_gain, vco_i_gain, freq_init):
+def runpll(ffc_input, vco_p_gain, vco_phase_gain, freq_init):
     #initialize DPLL
     vco_curr_phase = np.angle(ffc_input[0])
-    vco_curr_freq = -1 * freq_init #this is in hz - starting frequency
+    vco_curr_freq = -1 * freq_init #+ 250e3 #this is in hz - starting frequency
     vco_integrator = 0
 
     #phases for clusters
@@ -143,9 +147,11 @@ plot_end = packet_to_decode[1] - packet_to_decode[0]
 
 def try_pll(packet, kP, kI):
     pll_output_array, error_array = runpll(packet[2], kP, kI, packet[3])
-    return np.sum(np.power(error_array,4))
+    error = np.power(error_array,4)
+    error = butter_lowpass_filter(error, 100e3, sample_rate, order=3)
+    return np.sum(error)
 
-tune_pll = False
+tune_pll = True
 if tune_pll:
     pll_output_array, error_array = runpll(cfc_output, 0,0, packet_to_decode[3])
     min_error_sum = np.sum(np.power(error_array[plot_start:plot_end],4))
@@ -153,7 +159,7 @@ if tune_pll:
 
     #first scan on log scale
     scan_magnitude = 0
-    for i in np.arange(-10, 6,0.5):
+    for i in np.arange(-10, 5,0.5):
             print(f'running PLL with parameters {(10.0**i,0)}')
             error_sum = try_pll(packet_to_decode, 10.0**i, 0)
             print(f'error sum: {error_sum}')
@@ -208,15 +214,15 @@ print('plotting')
 #plt.title('output FFT')
 fig = plt.figure()
 ax = plt.axes(projection='3d')
-ax.set_title('Loop Filter Output')
+ax.set_title('Frequency Corrected Packet')
 ax.scatter3D(timescale[plot_start:plot_end], np.real(pll_output_array[plot_start:plot_end]), np.imag(pll_output_array[plot_start:plot_end]))
 fig = plt.figure()
 ax = plt.axes(projection='3d')
-ax.set_title('Loop Filter Input')
+ax.set_title('Packet')
 ax.scatter3D(timescale[plot_start:plot_end], np.real(cfc_output), np.imag(cfc_output[packet_start:packet_end]))
 #ax.scatter3D(timescale, np.real(cfc_output), np.imag(pll_output_array[plot_start:plot_end]))
 plt.figure()
-plt.title('PLL Error')
+plt.title('DPLL Error')
 plt.plot(timescale[plot_start:plot_end],error_array[plot_start:plot_end])
 plt.figure()
 plt.title('PLL Input - Phase')
@@ -233,7 +239,7 @@ plt.plot(timescale[plot_start:plot_end],neg_pi_2_line)
 plt.plot(timescale[plot_start:plot_end],neg_pi_line)
 plt.figure()
 plt.title('PLL Output - Phase')
-plt.plot(timescale[plot_start:plot_end],np.angle(pll_output_array[plot_start:plot_end]))
+plt.scatter(timescale[plot_start:plot_end],np.angle(pll_output_array[plot_start:plot_end]))
 zero_line = np.full(timescale[plot_start:plot_end].shape, 0)
 pi_2_line = np.full(timescale[plot_start:plot_end].shape, np.pi/2)
 pi_line = np.full(timescale[plot_start:plot_end].shape, np.pi)
