@@ -6,93 +6,15 @@ from scipy import signal
 
 
 sample_rate = 1e6 # Hz
-center_freq = 2426e6 # Hz
+center_freq = 2480e6 # Hz
 fft_size = 2**14
 modulation_index = 0.5
 #load in sample data
-data = np.fromfile('recorded.iq', np.complex64)
+data = np.fromfile('recorded_good_3.iq', np.complex64)
 timescale = np.arange(0, data.size / sample_rate, 1/sample_rate)
 print('running CFC')
 #raised cosine / low pass filter
 #TODO
-'''
-cfc_input = data
-#CFC
-#trim data to nearest FFT bin
-cfc_trimmed = cfc_input[0:fft_size * math.floor(cfc_input.size / fft_size)]
-#put data into FFT bins
-cfc_bins = np.reshape(cfc_trimmed, (-1, fft_size))
-#generate FFT bin frequency array
-freq_range = np.linspace(-sample_rate/2, sample_rate/2, num=fft_size)
-#create recorded frequency offset array
-bin_offsets = []
-
-for bin in cfc_bins:
-    #remove modulation components
-    bin_no_mod = np.power(bin, modulation_index) #i think there is a better algorithm here
-    #take FFT
-    freq_energy = np.abs(np.fft.fftshift(np.fft.fft(bin_no_mod)))
-    #find total of all bins
-    all_energy = np.sum(freq_energy)
-    #find 50% bin
-    curr_energy = 0
-    curr_bin = 0
-    while curr_energy < all_energy / 2:
-        curr_energy += freq_energy[curr_bin]
-        curr_bin += 1
-    #add frequency offset to offsets array
-    bin_offsets.append(freq_range[curr_bin])
-
-#stretch bin_offsets to size of data
-bin_offsets = np.repeat(bin_offsets, fft_size)
-#make a timescale for the data
-freq_shift_timescale = np.arange(0, bin_offsets.size/sample_rate, 1/sample_rate)
-#make frequency shifting signal to be mixed with data
-freq_shift = np.exp(-1j*np.pi*bin_offsets*freq_shift_timescale)
-#mix frequency compensation with data
-#cfc_output = data[0:freq_shift.size] * freq_shift
-cfc_output = data[0:freq_shift.size]
-#low pass data to remove double frequency term
-#cfc_output = butter_lowpass_filter(cfc_output, 800e3, sample_rate)
-#alternate band pass instead of low pass
-N = 11
-fp = 500e3
-pw = 200e3
-fc = 100e3
-#filter = signal.firls(N, [0, fp-pw-fc, fp-pw, fp+pw, fp+pw+fc, sample_rate/2], [0, 0, 1, 1, 0, 0], fs=sample_rate)
-#cfc_output = signal.lfilter(filter, 1, cfc_output)
-'''
-'''
-#CFC visualization
-plt.plot(np.abs(np.fft.fftshift(np.fft.fft(cfc_input))))
-cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
-cfc_data = np.zeros(cfc_waterfall_bins.shape)
-for index, bin in enumerate(cfc_waterfall_bins):
-    cfc_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
-
-pre_cfc_data = np.zeros(cfc_bins.shape)
-for index, bin in enumerate(cfc_bins):
-    pre_cfc_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
-    
-plt.figure()
-plt.title('data after CFC')
-plt.imshow(cfc_data,extent=[-sample_rate/2, sample_rate/2,cfc_waterfall_bins.shape[1],0], aspect='auto')
-plt.figure()
-plt.title('data before CFC')
-plt.imshow(pre_cfc_data,extent=[-sample_rate/2, sample_rate/2,cfc_waterfall_bins.shape[1],0], aspect='auto')
-plt.show()
-
-print('running waterfall FFT')
-fft_size = 2**4
-cfc_waterfall_bins = np.reshape(cfc_output, (-1, fft_size))
-cfc_data = np.zeros(cfc_waterfall_bins.shape)
-for index, bin in enumerate(cfc_waterfall_bins):
-    cfc_data[index] = np.abs(np.fft.fftshift(np.fft.fft(bin)))
-plt.figure()
-plt.title('data after CFC')
-cfc_data = np.rot90(cfc_data)
-plt.imshow(cfc_data,extent=[cfc_waterfall_bins.shape[1],0,-sample_rate/2, sample_rate/2], aspect='auto')
-'''
 
 #find the start and end of the packet(s) - power based
 rx_power = np.power(np.abs(data), 2)
@@ -130,11 +52,11 @@ def cfc_packet(packet, samp_rate, mod_index):
     packet_no_modulation = np.power(packet, mod_index)
     freq_range = np.linspace(-samp_rate/2, samp_rate/2, num=packet_no_modulation.size)
     fft_bins = np.fft.fftshift(np.fft.fft(packet_no_modulation))
-    bin_sum = np.sum(fft_bins)
+    bin_sum = np.sum(np.abs(fft_bins))
     curr_sum = 0
     curr_index = 0
     while(curr_sum < bin_sum/2):
-        curr_sum += fft_bins[curr_index]
+        curr_sum += np.abs(fft_bins[curr_index])
         curr_index += 1
     freq_offset = freq_range[curr_index]
     #now shift signal
@@ -152,13 +74,13 @@ for packet in packets:
 def runpll(ffc_input, vco_p_gain, vco_i_gain, freq_init):
     #initialize DPLL
     vco_curr_phase = np.angle(ffc_input[0])
-    vco_curr_freq = -0.5 * freq_init #this is in hz - starting frequency
+    vco_curr_freq = -1 * freq_init #this is in hz - starting frequency
     vco_integrator = 0
 
     #phases for clusters
     #cluster_phases = [np.pi/2, -1*np.pi/2]
-    cluster_phases = [0, np.pi, -1*np.pi]
-    #cluster_phases = [0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi]
+    #cluster_phases = [0, np.pi, -1*np.pi]
+    cluster_phases = [0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi]
     #cluster_phases = [0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi, 5*np.pi/4, 3*np.pi/2, 7*np.pi/4, 2*np.pi]
     
     #setup PLL output array
@@ -186,8 +108,10 @@ def runpll(ffc_input, vco_p_gain, vco_i_gain, freq_init):
         error_array[index] = min_error
         vco_integrator += min_error
         #update VCO
-        vco_curr_freq += vco_p_gain * min_error + vco_i_gain * vco_integrator
+        vco_curr_freq -= vco_p_gain * min_error
 
+
+    print(f'end FFC frequency: {vco_curr_freq}')
 
     return pll_output_array, error_array
 
@@ -195,8 +119,10 @@ def runpll(ffc_input, vco_p_gain, vco_i_gain, freq_init):
 
 packet_to_decode = corrected_packets[0]
 packet_avg_power = np.sum(np.power(np.abs(corrected_packets[0][2]), 2))/corrected_packets[0][2].size
-for index, packet in enumerate(corrected_packets):
+for index, packet in enumerate(corrected_packets):    
     new_packet_avg_power = np.sum(np.power(np.abs(packet[2]), 2))/packet[2].size
+    print(f'found packet {index} with length {packet[1] - packet[0]} and avg power {new_packet_avg_power}')
+
     if new_packet_avg_power > packet_avg_power:
         packet_to_decode = packet
         packet_avg_power = new_packet_avg_power
@@ -209,40 +135,77 @@ packet_end = packet_to_decode[1] - packet_to_decode[0]
 
 cfc_output = packet_to_decode[2]
 
-pll_output_array, error_array = runpll(cfc_output, 2,0, packet_to_decode[3])
+pll_output_array, error_array = runpll(cfc_output, 89125,0, packet_to_decode[3])
 
 
 plot_start = 0
 plot_end = packet_to_decode[1] - packet_to_decode[0] 
-#'''
-min_error_sum = np.sum(np.power(error_array[plot_start:plot_end],2))
-best_params = (1.1,0.9)
 
-for i in np.arange(0, 10,0.25):
-    for j in np.arange(0, 1,0.2):
-        print(f'running PLL with parameters {(i,j)}')
-        pll_output_array, error_array = runpll(cfc_output, i, j, packet_to_decode[3])
-        error_sum = np.sum(np.power(error_array,2))
-        print(f'error sum: {error_sum}')
-        if error_sum < min_error_sum:
-            min_error_sum = error_sum
-            best_params = (i, j)
+def try_pll(packet, kP, kI):
+    pll_output_array, error_array = runpll(packet[2], kP, kI, packet[3])
+    return np.sum(np.power(error_array,4))
 
-print(f'best parameters: {best_params} with error sum of {min_error_sum}')
+tune_pll = False
+if tune_pll:
+    pll_output_array, error_array = runpll(cfc_output, 0,0, packet_to_decode[3])
+    min_error_sum = np.sum(np.power(error_array[plot_start:plot_end],4))
+    best_params = (0,0)
 
-pll_output_array, error_array = runpll(cfc_output, best_params[0], best_params[1], packet_to_decode[3])
+    #first scan on log scale
+    scan_magnitude = 0
+    for i in np.arange(-10, 6,0.5):
+            print(f'running PLL with parameters {(10.0**i,0)}')
+            error_sum = try_pll(packet_to_decode, 10.0**i, 0)
+            print(f'error sum: {error_sum}')
+            if error_sum < min_error_sum:
+                min_error_sum = error_sum
+                scan_magnitude = i
+                best_params = (10.0**i, 0)
+    
+    #then try values in scale
+    for i in np.arange(-1, 1, 0.01):
+            print(f'running PLL with parameters {(10.0**(i+scan_magnitude),0)}')
+            error_sum = try_pll(packet_to_decode, 10.0**(i+scan_magnitude), 0)
+            print(f'error sum: {error_sum}')
+            if error_sum < min_error_sum:
+                min_error_sum = error_sum
+                best_params = (10.0**(i+scan_magnitude), 0)
+
+    print(f'best parameters: {best_params} with error sum of {min_error_sum}')
+
+    pll_output_array, error_array = runpll(cfc_output, best_params[0], best_params[1], packet_to_decode[3])
 
 #phase detector for bit detection
 #the output should be oriented so decision boundary is imaginary axis. we can just read the real value for binary data
 binary_data = np.zeros(pll_output_array.shape, dtype=np.byte)
 for index, sample in enumerate(pll_output_array):
-    if np.real(sample) > 0:
-        binary_data[index] = 1
+    if np.abs(np.real(sample)) > np.abs(np.imag(sample)):
+        if np.real(sample) > 0:
+            binary_data[index] = 0#2
+    else:
+        if np.imag(sample) > 0:
+            binary_data[index] = 1
+        else:
+            binary_data[index] = 1#3
 
+binary_data_delta = np.zeros(pll_output_array.shape, dtype=np.byte)
+last_bit = binary_data[0]
+for index, sample in enumerate(binary_data):
+    if index == 0:
+        continue
+    if last_bit == sample:
+        binary_data_delta[index] = 1
+    last_bit = sample
+#print(binary_data_delta)
 #'''
 
 
 print('plotting')
+#plt.plot(np.abs(np.fft.fftshift(np.fft.fft(packet_to_decode[2]))))
+#plt.title('input FFT')
+#plt.figure()
+#plt.plot(np.abs(np.fft.fftshift(np.fft.fft(pll_output_array))))
+#plt.title('output FFT')
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 ax.set_title('Loop Filter Output')
@@ -258,7 +221,6 @@ plt.plot(timescale[plot_start:plot_end],error_array[plot_start:plot_end])
 plt.figure()
 plt.title('PLL Input - Phase')
 plt.plot(timescale[plot_start:plot_end],np.angle(cfc_output))
-plt.plot(timescale[plot_start:plot_end],np.angle(pll_output_array[plot_start:plot_end]))
 zero_line = np.full(timescale[plot_start:plot_end].shape, 0)
 pi_2_line = np.full(timescale[plot_start:plot_end].shape, np.pi/2)
 pi_line = np.full(timescale[plot_start:plot_end].shape, np.pi)
@@ -285,7 +247,8 @@ plt.plot(timescale[plot_start:plot_end],neg_pi_line)
 plt.figure()
 plt.title('output data')
 plt.plot(timescale[plot_start:plot_end],binary_data)
-binary_data_len = binary_data.size
-binary_data_ones = np.sum(binary_data)
+binary_data_len = binary_data_delta.size
+binary_data_ones = np.sum(binary_data_delta)
 print(f'{binary_data_len} bits detected with {binary_data_ones} ones, ratio of {binary_data_ones/binary_data_len}')
+print(binary_data)
 plt.show()

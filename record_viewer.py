@@ -7,24 +7,9 @@ center_freq = 2480e6 #107.9e6 # Hz
 
 rx_bw = 1e6
 
-sdr = adi.Pluto("ip:192.168.2.1")
-sdr.sample_rate = int(sample_rate)
-sdr.rx_rf_bandwidth = int(rx_bw) # filter cutoff, just set it to the same as sample rate
-sdr.rx_lo = int(center_freq)
-
 buffer_length = 1024*128
 
-sdr.rx_buffer_size = buffer_length # this is the buffer the Pluto uses to buffer samples
-
-sdr.gain_control_mode_chan0 = "manual"
-sdr.rx_hardwaregain_chan0 = 30.0
-
-data = sdr.rx()
-
-print('got data')
-
-data = data.astype(np.complex64)
-data.tofile('recorded.iq')
+data = np.fromfile('recorded_good_3.iq', np.complex64)
 
 x_scale = np.linspace(-sample_rate/2 + center_freq, sample_rate/2 + center_freq, num=data.size)
 
